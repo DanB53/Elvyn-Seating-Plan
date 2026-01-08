@@ -5,399 +5,181 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Elvyn Ball Seating Plan Generator</title>
     <style>
-        body {
-            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; line-height: 1.6;
-        }
-        .container { max-width: 1200px; margin: 0 auto; }
-        header, .card {
-            background-color: #fff; padding: 24px; border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;
-        }
-        h1 { color: #2c3e50; margin: 0; font-size: 1.75rem; }
-        h2 {
-            color: #2c3e50; border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px; margin-top: 25px; font-size: 1.5rem;
-        }
-        .inputs { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
-        .input-group { flex: 1 1 180px; } 
-        label { display: block; font-weight: 600; margin-bottom: 8px; color: #555; }
-        input[type="text"] {
-            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 1rem;
-        }
-        button {
-            padding: 12px 20px; background-color: #3498db; color: white; border: none;
-            border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: 600;
-            transition: background-color 0.2s ease; height: 45px;
-        }
-        button:hover { background-color: #2980b9; }
-        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-        #demo-button { background-color: #2ecc71; }
-        #demo-button:hover { background-color: #27ae60; }
-
-        #results-container { display: none; }
-        #summary-report ul {
-            list-style-type: none; padding: 0; margin: 0;
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;
-        }
-        #summary-report li { font-size: 1.1rem; padding: 16px; background: #ecf0f1; border-radius: 8px; }
-        #summary-report li strong { color: #2c3e50; display: block; margin-bottom: 4px; }
-        #summary-report li.cost-score { background-color: #eafaf1; }
-        #summary-report li.cost-score strong { color: #27ae60; }
-        
-        #table-view {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px; margin-bottom: 20px;
-        }
-        .table-card { background-color: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid; overflow: hidden; }
-        .table-card h3 { margin: 0; padding: 16px 20px; background-color: #ecf0f1; border-bottom: 1px solid #e0e0e0; font-size: 1.2rem; }
-        .table-card-body { padding: 20px; }
-        .table-card p.seats-left { margin: 15px 0 0 0; font-weight: 600; font-size: 1.1em; }
-        .table-card ul { list-style-type: none; padding: 0; margin: 0; min-height: 50px; }
-        .table-card li { background: #f9f9f9; border: 1px solid #eee; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.95rem; }
-        
-        .cap-tag { float: right; padding: 4px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 700; margin-top: -2px; }
-        .cap-10 { background-color: #ecf0f1; color: #7f8c8d; }
-        
-        .table-empty { border-color: #2ecc71; } 
-        .table-partial { border-color: #f39c12; } 
-        .table-full { border-color: #e74c3c; }
-
-        #unseated-report-container { display: none; }
-        #unseated-report { background-color: #fff1f0; padding: 20px; border-radius: 8px; border-left: 5px solid #e74c3c; }
-        
-        #console-log-container { background-color: #2c3e50; color: #f4f7f6; padding: 24px; border-radius: 12px; margin-top: 20px; }
-        #console-log {
-            font-family: monospace; font-size: 0.9em; white-space: pre-wrap; height: 200px; 
-            overflow-y: auto; background: #34495e; padding: 15px; border-radius: 8px;
-        }
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .inputs { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:disabled { background: #ccc; }
+        #console-log { background: #2c3e50; color: #ecf0f1; padding: 15px; height: 150px; overflow-y: auto; font-family: monospace; font-size: 12px; border-radius: 5px; }
+        .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .table-card { background: white; border: 1px solid #ddd; padding: 10px; border-radius: 5px; border-top: 5px solid #3498db; }
+        .table-full { border-top-color: #e74c3c; }
+        ul { list-style: none; padding: 0; }
+        li { font-size: 0.9em; padding: 3px 0; border-bottom: 1px solid #eee; }
     </style>
 </head>
 <body>
+
 <div class="container">
-    <header><h1>Elvyn Ball Seating Plan Generator</h1></header>
-
+    <h2>Elvyn Ball Seating Plan</h2>
+    
     <div class="card inputs">
-        <div class="input-group">
-            <label for="group-sizes">Group Sizes (comma-separated)</label>
-            <input type="text" id="group-sizes" value="10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5">
+        <div style="flex: 2">
+            <label>Group Sizes</label><br>
+            <input type="text" id="group-sizes" style="width: 100%" value="10, 8, 8, 5, 2, 10, 10, 10, 6, 4, 10, 10, 5">
         </div>
-        <div class="input-group">
-            <label for="num-tables">Total Number of Tables</label>
-            <input type="text" id="num-tables" value="23">
+        <div>
+            <label>Tables</label><br>
+            <input type="number" id="num-tables" value="23" style="width: 60px">
         </div>
-        <button id="run-button">Run Genetic Algorithm</button>
-        <button id="demo-button">Run Demo</button>
+        <button id="run-btn">Run GA</button>
+        <button id="demo-btn" style="background: #27ae60;">Demo</button>
     </div>
 
-    <div id="results-container">
-        <h2>📈 Summary Report</h2>
-        <div id="summary-report" class="card"></div>
-        <h2>🍽️ Table View</h2>
-        <div id="table-view"></div>
-        <div id="unseated-report-container">
-            <h2>🚫 Unseated Groups</h2>
-            <div id="unseated-report"></div>
-        </div>
-    </div>
+    <div id="console-log">Ready...</div>
 
-    <div id="console-log-container" class="card">
-        <h2 style="color:white; border:none;">Backend Activity</h2>
-        <pre id="console-log"></pre>
+    <div id="results" style="display:none;">
+        <div class="card" id="summary"></div>
+        <div class="table-grid" id="table-view"></div>
     </div>
 </div>
 
 <script>
-    const runButton = document.getElementById('run-button');
-    const demoButton = document.getElementById('demo-button');
-    const groupSizesInput = document.getElementById('group-sizes');
-    const numTablesInput = document.getElementById('num-tables');
-    const resultsContainer = document.getElementById('results-container');
-    const summaryReportEl = document.getElementById('summary-report');
-    const tableViewEl = document.getElementById('table-view');
-    const consoleLogEl = document.getElementById('console-log');
-    const unseatedReportContainer = document.getElementById('unseated-report-container');
-    const unseatedReportEl = document.getElementById('unseated-report');
-    
-    let logOutput = "";
-    
-    function log(message) {
-        logOutput += `[${new Date().toLocaleTimeString()}] ${message}\n`;
-        consoleLogEl.textContent = logOutput;
-        consoleLogEl.scrollTop = consoleLogEl.scrollHeight;
-    }
+    // --- UTILITIES ---
+    const logEl = document.getElementById('console-log');
+    const log = (msg) => {
+        const d = new Date();
+        logEl.innerHTML += `<div>[${d.toLocaleTimeString()}] ${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+    };
 
-    function logProgress(message) {
-        const lines = logOutput.split('\n');
-        if (lines.length > 1 && lines[lines.length - 2].startsWith('[Progress]')) {
-            lines[lines.length - 2] = `[Progress] ${message}`;
-            logOutput = lines.join('\n');
-        } else {
-            logOutput += `[Progress] ${message}\n`;
-        }
-        consoleLogEl.textContent = logOutput;
-    }
-
-    function deepCopy(obj) {
-        return JSON.parse(JSON.stringify(obj));
-    }
-
-    runButton.addEventListener('click', () => runGeneticAlgorithm());
-    demoButton.addEventListener('click', () => runDemo());
-
-    async function runDemo() {
-        log("🎲 Generating Random Demo Data...");
-        const groups = Array.from({length: 25}, () => Math.floor(Math.random() * 9) + 2);
-        groupSizesInput.value = groups.join(', ');
-        numTablesInput.value = "23";
-        await runGeneticAlgorithm();
-    }
-
-    async function runGeneticAlgorithm() {
-        // UI Setup
-        runButton.disabled = true;
-        demoButton.disabled = true;
-        runButton.textContent = "Processing...";
-        resultsContainer.style.display = 'none';
-        logOutput = '';
-
-        const groupInput = groupSizesInput.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
-        const numTables = parseInt(numTablesInput.value) || 0;
-        
-        if (numTables <= 0 || groupInput.length === 0) {
-            log("❌ Error: Invalid Inputs");
-            resetUI();
-            return;
-        }
-
-        const originalGroups = groupInput.map((size, idx) => ({ id: idx + 1, size }));
-        const tableConfig = Array.from({length: numTables}, (_, i) => ({ id: i + 1, capacity: 10, groups: [] }));
-
-        // GA Parameters
-        const populationSize = 40;
-        const generations = 100;
-        const mutationRate = 0.2;
-
-        try {
-            log("🚀 Phase 1: Generating Initial Seed (Greedy)...");
-            let seedTables = generateGreedySeed(originalGroups, numTables);
-            let bestSolution = { tables: seedTables, fitness: calculateFitness(seedTables, originalGroups) };
-
-            log("🚀 Phase 2: Evolving Population...");
-            let population = [];
-            for(let i=0; i<populationSize; i++) {
-                let mutated = mutate(deepCopy(seedTables), originalGroups);
-                population.push({ tables: mutated, fitness: calculateFitness(mutated, originalGroups) });
-            }
-
-            for (let gen = 0; gen < generations; gen++) {
-                population.sort((a, b) => b.fitness - a.fitness);
-                if (population[0].fitness > bestSolution.fitness) {
-                    bestSolution = deepCopy(population[0]);
-                }
-
-                if (gen % 5 === 0) {
-                    logProgress(`Generation ${gen}/${generations} | Best Cost: ${10000000 - bestSolution.fitness}`);
-                    await new Promise(r => setTimeout(r, 1)); // Keep UI alive
-                }
-
-                let nextGen = population.slice(0, 5); // Keep top 5 elites
-                while (nextGen.length < populationSize) {
-                    let parentA = selectParent(population);
-                    let parentB = selectParent(population);
-                    let child = crossover(parentA.tables, parentB.tables);
-                    child = repairSolution(child, originalGroups);
-                    if (Math.random() < mutationRate) child = mutate(child, originalGroups);
-                    
-                    nextGen.push({ tables: child, fitness: calculateFitness(child, originalGroups) });
-                }
-                population = nextGen;
-            }
-
-            log("✅ Optimization Complete.");
-            renderResults(bestSolution.tables, originalGroups);
-
-        } catch (e) {
-            log(`❌ Critical Error: ${e.message}`);
-            console.error(e);
-        }
-
-        resetUI();
-    }
-
-    function resetUI() {
-        runButton.disabled = false;
-        demoButton.disabled = false;
-        runButton.textContent = "Run Genetic Algorithm";
+    // Fast copy specifically for this data structure (much faster than JSON.parse)
+    function cloneTables(tables) {
+        return tables.map(t => ({
+            id: t.id,
+            capacity: t.capacity,
+            groups: t.groups.map(g => ({ ...g }))
+        }));
     }
 
     // --- GA LOGIC ---
+    async function runGA() {
+        const btn = document.getElementById('run-btn');
+        btn.disabled = true;
+        
+        const rawSizes = document.getElementById('group-sizes').value.split(',').map(n => parseInt(n.trim())).filter(n => n > 0);
+        const tableCount = parseInt(document.getElementById('num-tables').value);
+        const originalGroups = rawSizes.map((size, i) => ({ id: i + 1, size }));
 
-    function generateGreedySeed(groups, numTables) {
-        let tables = Array.from({length: numTables}, (_, i) => ({ id: i + 1, capacity: 10, groups: [] }));
-        let sortedGroups = [...groups].sort((a,b) => b.size - a.size);
+        log(`Starting... Seating ${rawSizes.reduce((a,b)=>a+b, 0)} people across ${tableCount} tables.`);
 
-        sortedGroups.forEach(g => {
-            let seated = false;
-            for (let t of tables) {
-                let currentLoad = t.groups.reduce((sum, gr) => sum + gr.size, 0);
-                if (currentLoad + g.size <= t.capacity) {
+        // 1. Initial Seed (Greedy)
+        let bestTables = generateSeed(originalGroups, tableCount);
+        let bestFitness = calcFitness(bestTables, originalGroups);
+
+        // 2. Evolution Loop
+        for (let gen = 0; gen < 100; gen++) {
+            // Create a small mutation of the best
+            let candidate = mutate(cloneTables(bestTables), originalGroups);
+            candidate = repair(candidate, originalGroups);
+            let cFitness = calcFitness(candidate, originalGroups);
+
+            if (cFitness > bestFitness) {
+                bestFitness = cFitness;
+                bestTables = candidate;
+            }
+
+            if (gen % 20 === 0) {
+                log(`Generation ${gen}... Current Score: ${bestFitness}`);
+                await new Promise(r => setTimeout(r, 1)); // Yield to UI
+            }
+        }
+
+        log("✅ Done!");
+        render(bestTables, originalGroups);
+        btn.disabled = false;
+    }
+
+    function generateSeed(groups, count) {
+        let tables = Array.from({length: count}, (_, i) => ({ id: i+1, capacity: 10, groups: [] }));
+        groups.forEach(g => {
+            for(let t of tables) {
+                let used = t.groups.reduce((a,b)=>a+b.size, 0);
+                if (used + g.size <= 10) {
                     t.groups.push({ id: g.id, size: g.size });
-                    seated = true; break;
+                    return;
                 }
             }
-            if (!seated) {
-                // If group is too big for any one table, split it (simple split)
-                let remaining = g.size;
-                for (let t of tables) {
-                    let currentLoad = t.groups.reduce((sum, gr) => sum + gr.size, 0);
-                    let space = t.capacity - currentLoad;
-                    if (space >= 2 || (space === 1 && g.size === 1)) {
-                        let take = Math.min(remaining, space);
-                        if (remaining - take === 1) take--; // Avoid leaving 1 person alone
-                        if (take > 0) {
-                            t.groups.push({ id: g.id, size: take });
-                            remaining -= take;
-                        }
-                    }
-                    if (remaining <= 0) break;
-                }
+            // If it doesn't fit, just shove it in the first table (repair will fix it)
+            tables[0].groups.push({ id: g.id, size: g.size });
+        });
+        return tables;
+    }
+
+    function calcFitness(tables, originals) {
+        let score = 10000;
+        let seatedMap = new Map();
+
+        tables.forEach(t => {
+            let used = 0;
+            t.groups.forEach(g => {
+                used += g.size;
+                seatedMap.set(g.id, (seatedMap.get(g.id) || 0) + 1);
+            });
+            if (used > 10) score -= (used - 10) * 500; // Penalty for overfilling
+        });
+
+        seatedMap.forEach((count, id) => {
+            if (count > 1) score -= (count - 1) * 100; // Penalty for splitting
+        });
+
+        return score;
+    }
+
+    function mutate(tables, originals) {
+        let t1 = tables[Math.floor(Math.random() * tables.length)];
+        let t2 = tables[Math.floor(Math.random() * tables.length)];
+        if (t1.groups.length > 0) {
+            t2.groups.push(t1.groups.pop());
+        }
+        return tables;
+    }
+
+    function repair(tables, originals) {
+        // Simple repair: if a table is way over, move last group to a random table
+        tables.forEach(t => {
+            while (t.groups.reduce((a,b)=>a+b.size,0) > 12) {
+                let g = t.groups.pop();
+                tables[Math.floor(Math.random() * tables.length)].groups.push(g);
             }
         });
         return tables;
     }
 
-    function calculateFitness(tables, originalGroups) {
-        let cost = 0;
-        let groupMaps = new Map();
-
-        tables.forEach(t => {
-            let tableTotal = 0;
-            t.groups.forEach(g => {
-                tableTotal += g.size;
-                if(!groupMaps.has(g.id)) groupMaps.set(g.id, []);
-                groupMaps.get(g.id).push(g.size);
-            });
-            if (tableTotal > t.capacity) cost += (tableTotal - t.capacity) * 10000;
-        });
-
-        originalGroups.forEach(og => {
-            let placements = groupMaps.get(og.id) || [];
-            let totalSeated = placements.reduce((a, b) => a + b, 0);
-            
-            if (totalSeated < og.size) cost += (og.size - totalSeated) * 5000;
-            if (placements.length > 1) cost += (placements.length - 1) * 500;
-            if (placements.some(p => p === 1 && og.size > 1)) cost += 2000;
-        });
-
-        return 10000000 - cost;
-    }
-
-    function selectParent(pop) {
-        let k = 3;
-        let best = pop[Math.floor(Math.random() * pop.length)];
-        for(let i=0; i<k; i++) {
-            let next = pop[Math.floor(Math.random() * pop.length)];
-            if (next.fitness > best.fitness) best = next;
-        }
-        return best;
-    }
-
-    function crossover(pA, pB) {
-        let cut = Math.floor(Math.random() * pA.length);
-        return deepCopy([...pA.slice(0, cut), ...pB.slice(cut)]);
-    }
-
-    function mutate(tables, originalGroups) {
-        let newTables = deepCopy(tables);
-        let t1 = newTables[Math.floor(Math.random() * newTables.length)];
-        let t2 = newTables[Math.floor(Math.random() * newTables.length)];
-
-        if (t1.groups.length > 0) {
-            let gIdx = Math.floor(Math.random() * t1.groups.length);
-            let movedPart = t1.groups.splice(gIdx, 1)[0];
-            t2.groups.push(movedPart);
-        }
-        return newTables;
-    }
-
-    function repairSolution(tables, originalGroups) {
-        // Clean up duplicates and missing people created by crossover
-        let cleaned = tables.map(t => ({...t, groups: []}));
-        let seatedMap = new Map();
-
-        tables.forEach(t => {
-            t.groups.forEach(g => {
-                let current = seatedMap.get(g.id) || 0;
-                let original = originalGroups.find(og => og.id === g.id);
-                if (current + g.size <= original.size) {
-                    let targetTable = cleaned.find(ct => ct.id === t.id);
-                    targetTable.groups.push(g);
-                    seatedMap.set(g.id, current + g.size);
-                }
-            });
-        });
+    function render(tables, originals) {
+        document.getElementById('results').style.display = 'block';
+        const grid = document.getElementById('table-view');
+        grid.innerHTML = '';
         
-        // Fill in anyone missing
-        originalGroups.forEach(og => {
-            let seated = seatedMap.get(og.id) || 0;
-            if (seated < og.size) {
-                let remaining = og.size - seated;
-                for (let t of cleaned) {
-                    let load = t.groups.reduce((a,b) => a + b.size, 0);
-                    let space = 10 - load;
-                    if (space > 0) {
-                        let take = Math.min(remaining, space);
-                        t.groups.push({ id: og.id, size: take });
-                        remaining -= take;
-                    }
-                    if (remaining <= 0) break;
-                }
-            }
-        });
-
-        return cleaned;
-    }
-
-    function renderResults(tables, originalGroups) {
-        resultsContainer.style.display = 'block';
-        tableViewEl.innerHTML = '';
-        
-        let totalSeated = 0;
-        let totalSplits = 0;
-        let groupPlacements = new Map();
-
         tables.forEach(t => {
-            let used = t.groups.reduce((a, b) => a + b.size, 0);
-            totalSeated += used;
-            
-            let status = used === 0 ? 'table-empty' : (used === 10 ? 'table-full' : 'table-partial');
-            let itemsHtml = t.groups.map(g => {
-                let og = originalGroups.find(o => o.id === g.id);
-                if(!groupPlacements.has(g.id)) groupPlacements.set(g.id, 0);
-                groupPlacements.set(g.id, groupPlacements.get(g.id) + 1);
-                return `<li>Group ${g.id}: <strong>${g.size}</strong> / ${og.size}</li>`;
-            }).join('');
-
-            tableViewEl.innerHTML += `
-                <div class="table-card ${status}">
-                    <h3>Table ${t.id} <span class="cap-tag cap-10">10 Seats</span></h3>
-                    <div class="table-card-body">
-                        <ul>${itemsHtml || '<li><em>Empty</em></li>'}</ul>
-                        <p class="seats-left">Seats Used: ${used} / 10</p>
-                    </div>
+            let used = t.groups.reduce((a,b)=>a+b.size, 0);
+            let items = t.groups.map(g => `<li>Group ${g.id} (Size: ${g.size})</li>`).join('');
+            grid.innerHTML += `
+                <div class="table-card ${used >= 10 ? 'table-full' : ''}">
+                    <strong>Table ${t.id}</strong> (${used}/10)
+                    <ul>${items || '<li>Empty</li>'}</ul>
                 </div>`;
         });
-
-        groupPlacements.forEach(count => { if(count > 1) totalSplits += (count - 1); });
-
-        summaryReportEl.innerHTML = `<ul>
-            <li><strong>Total People:</strong> ${originalGroups.reduce((a,b) => a+b.size, 0)}</li>
-            <li><strong>People Seated:</strong> ${totalSeated}</li>
-            <li><strong>Tables Used:</strong> ${tables.filter(t => t.groups.length > 0).length}</li>
-            <li><strong>Group Splits:</strong> ${totalSplits}</li>
-        </ul>`;
     }
+
+    document.getElementById('run-btn').onclick = runGA;
+    document.getElementById('demo-btn').onclick = () => {
+        document.getElementById('group-sizes').value = Array.from({length: 30}, () => Math.floor(Math.random() * 8) + 2).join(', ');
+        runGA();
+    };
 </script>
+
 </body>
 </html>
