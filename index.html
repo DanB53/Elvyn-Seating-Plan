@@ -5,178 +5,212 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Elvyn Ball Seating Plan Generator</title>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; color: #333; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .inputs { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
-        input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; font-weight: bold; }
-        button:disabled { background: #ccc; }
-        #console-log { background: #2c3e50; color: #ecf0f1; padding: 15px; height: 150px; overflow-y: auto; font-family: monospace; font-size: 12px; border-radius: 5px; }
-        .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
-        .table-card { background: white; border: 1px solid #ddd; padding: 10px; border-radius: 5px; border-top: 5px solid #3498db; }
+        body { font-family: "Inter", sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; line-height: 1.6; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        header, .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h1 { color: #2c3e50; margin: 0; font-size: 1.5rem; }
+        .inputs { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
+        .input-group { flex: 1 1 200px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        button { padding: 12px 20px; background-color: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        button:hover { background-color: #2980b9; }
+        #demo-btn { background-color: #2ecc71; }
+        #demo-btn:hover { background-color: #27ae60; }
+        
+        #summary-report ul { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
+        #summary-report li { background: #ecf0f1; padding: 15px; border-radius: 8px; font-size: 0.95rem; }
+        #summary-report li strong { display: block; color: #2c3e50; font-size: 1.1rem; }
+
+        .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+        .table-card { background: white; border-radius: 12px; border-top: 5px solid #3498db; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .table-full { border-top-color: #e74c3c; }
-        ul { list-style: none; padding: 0; }
-        li { font-size: 0.9em; padding: 3px 0; border-bottom: 1px solid #eee; }
+        .table-empty { border-top-color: #2ecc71; }
+        .table-card h3 { margin: 0 0 10px 0; font-size: 1.1rem; }
+        .table-card ul { list-style: none; padding: 0; margin: 0; }
+        .table-card li { padding: 6px; background: #f9f9f9; margin-bottom: 4px; border-radius: 4px; font-size: 0.9rem; border: 1px solid #eee; }
+        .seats-left { margin-top: 10px; font-weight: bold; color: #7f8c8d; font-size: 0.9rem; }
+
+        #console-log { background: #2c3e50; color: #ecf0f1; padding: 15px; height: 120px; overflow-y: auto; font-family: monospace; font-size: 12px; border-radius: 8px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Elvyn Ball Seating Plan</h2>
-    
+    <header><h1>Elvyn Ball Seating Plan Generator</h1></header>
+
     <div class="card inputs">
-        <div style="flex: 2">
-            <label>Group Sizes</label><br>
-            <input type="text" id="group-sizes" style="width: 100%" value="10, 8, 8, 5, 2, 10, 10, 10, 6, 4, 10, 10, 5">
+        <div class="input-group">
+            <label>Group Sizes (comma-separated)</label>
+            <input type="text" id="group-sizes" value="10, 10, 8, 5, 2, 10, 10, 10, 6, 4, 10, 10, 5">
         </div>
-        <div>
-            <label>Tables</label><br>
-            <input type="number" id="num-tables" value="23" style="width: 60px">
+        <div class="input-group" style="flex: 0 0 100px;">
+            <label>Tables</label>
+            <input type="number" id="num-tables" value="23">
         </div>
-        <button id="run-btn">Run GA</button>
-        <button id="demo-btn" style="background: #27ae60;">Demo</button>
+        <button id="run-btn">Run Genetic Algorithm</button>
+        <button id="demo-btn">Run Demo</button>
     </div>
 
-    <div id="console-log">Ready...</div>
-
     <div id="results" style="display:none;">
-        <div class="card" id="summary"></div>
+        <h2>📈 Summary Report</h2>
+        <div id="summary-report" class="card"></div>
+        
+        <h2>🍽️ Table View</h2>
         <div class="table-grid" id="table-view"></div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0">Backend Activity</h3>
+        <div id="console-log">Ready to process...</div>
     </div>
 </div>
 
 <script>
-    // --- UTILITIES ---
     const logEl = document.getElementById('console-log');
+    const resultsArea = document.getElementById('results');
+
     const log = (msg) => {
-        const d = new Date();
-        logEl.innerHTML += `<div>[${d.toLocaleTimeString()}] ${msg}</div>`;
+        logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
         logEl.scrollTop = logEl.scrollHeight;
     };
 
-    // Fast copy specifically for this data structure (much faster than JSON.parse)
+    // Fast cloning to avoid JSON.stringify overhead
     function cloneTables(tables) {
         return tables.map(t => ({
             id: t.id,
-            capacity: t.capacity,
+            capacity: 10,
             groups: t.groups.map(g => ({ ...g }))
         }));
     }
 
-    // --- GA LOGIC ---
     async function runGA() {
-        const btn = document.getElementById('run-btn');
-        btn.disabled = true;
-        
+        resultsArea.style.display = 'none';
+        logEl.innerHTML = '';
+        log("🚀 Initializing Algorithm...");
+
         const rawSizes = document.getElementById('group-sizes').value.split(',').map(n => parseInt(n.trim())).filter(n => n > 0);
-        const tableCount = parseInt(document.getElementById('num-tables').value);
+        const tableCount = parseInt(document.getElementById('num-tables').value) || 1;
         const originalGroups = rawSizes.map((size, i) => ({ id: i + 1, size }));
 
-        log(`Starting... Seating ${rawSizes.reduce((a,b)=>a+b, 0)} people across ${tableCount} tables.`);
+        // 1. Initial Seating (Greedy First-Fit)
+        let currentTables = generateGreedySeed(originalGroups, tableCount);
+        let currentFitness = calcFitness(currentTables, originalGroups);
+        let bestTables = cloneTables(currentTables);
+        let bestFitness = currentFitness;
 
-        // 1. Initial Seed (Greedy)
-        let bestTables = generateSeed(originalGroups, tableCount);
-        let bestFitness = calcFitness(bestTables, originalGroups);
-
-        // 2. Evolution Loop
-        for (let gen = 0; gen < 100; gen++) {
-            // Create a small mutation of the best
-            let candidate = mutate(cloneTables(bestTables), originalGroups);
-            candidate = repair(candidate, originalGroups);
+        // 2. Evolution
+        for (let gen = 0; gen < 150; gen++) {
+            let candidate = mutate(cloneTables(bestTables));
             let cFitness = calcFitness(candidate, originalGroups);
 
-            if (cFitness > bestFitness) {
+            // If better or equal (to allow exploration), accept
+            if (cFitness >= bestFitness) {
                 bestFitness = cFitness;
                 bestTables = candidate;
             }
 
-            if (gen % 20 === 0) {
-                log(`Generation ${gen}... Current Score: ${bestFitness}`);
-                await new Promise(r => setTimeout(r, 1)); // Yield to UI
+            if (gen % 25 === 0) {
+                log(`Generation ${gen}... Current Cost Score: ${10000 - bestFitness}`);
+                await new Promise(r => setTimeout(r, 1));
             }
         }
 
-        log("✅ Done!");
+        log("✅ Optimal Seating Found.");
         render(bestTables, originalGroups);
-        btn.disabled = false;
     }
 
-    function generateSeed(groups, count) {
-        let tables = Array.from({length: count}, (_, i) => ({ id: i+1, capacity: 10, groups: [] }));
-        groups.forEach(g => {
+    function generateGreedySeed(groups, count) {
+        let tables = Array.from({length: count}, (_, i) => ({ id: i+1, groups: [] }));
+        let sorted = [...groups].sort((a,b) => b.size - a.size);
+
+        sorted.forEach(g => {
+            let placed = false;
             for(let t of tables) {
                 let used = t.groups.reduce((a,b)=>a+b.size, 0);
                 if (used + g.size <= 10) {
                     t.groups.push({ id: g.id, size: g.size });
-                    return;
+                    placed = true; break;
                 }
             }
-            // If it doesn't fit, just shove it in the first table (repair will fix it)
-            tables[0].groups.push({ id: g.id, size: g.size });
+            if (!placed) tables[Math.floor(Math.random()*count)].groups.push({ id: g.id, size: g.size });
         });
         return tables;
     }
 
     function calcFitness(tables, originals) {
         let score = 10000;
-        let seatedMap = new Map();
+        let groupPlacements = new Map();
 
         tables.forEach(t => {
             let used = 0;
             t.groups.forEach(g => {
                 used += g.size;
-                seatedMap.set(g.id, (seatedMap.get(g.id) || 0) + 1);
+                groupPlacements.set(g.id, (groupPlacements.get(g.id) || 0) + 1);
             });
-            if (used > 10) score -= (used - 10) * 500; // Penalty for overfilling
+            if (used > 10) score -= (used - 10) * 1000; // Heavy penalty for overfilled
+            if (used < 5 && used > 0) score -= 50; // Penalty for very empty tables
         });
 
-        seatedMap.forEach((count, id) => {
-            if (count > 1) score -= (count - 1) * 100; // Penalty for splitting
+        groupPlacements.forEach((count, id) => {
+            if (count > 1) score -= (count - 1) * 200; // Penalty for splitting groups
         });
 
         return score;
     }
 
-    function mutate(tables, originals) {
+    function mutate(tables) {
         let t1 = tables[Math.floor(Math.random() * tables.length)];
         let t2 = tables[Math.floor(Math.random() * tables.length)];
         if (t1.groups.length > 0) {
-            t2.groups.push(t1.groups.pop());
+            let part = t1.groups.splice(Math.floor(Math.random()*t1.groups.length), 1)[0];
+            t2.groups.push(part);
         }
         return tables;
     }
 
-    function repair(tables, originals) {
-        // Simple repair: if a table is way over, move last group to a random table
-        tables.forEach(t => {
-            while (t.groups.reduce((a,b)=>a+b.size,0) > 12) {
-                let g = t.groups.pop();
-                tables[Math.floor(Math.random() * tables.length)].groups.push(g);
-            }
-        });
-        return tables;
-    }
-
     function render(tables, originals) {
-        document.getElementById('results').style.display = 'block';
+        resultsArea.style.display = 'block';
+        const summary = document.getElementById('summary-report');
         const grid = document.getElementById('table-view');
-        grid.innerHTML = '';
         
+        let totalPeople = originals.reduce((a,b)=>a+b.size, 0);
+        let seatedCount = 0;
+        let splitCount = 0;
+        let placementMap = new Map();
+
+        grid.innerHTML = '';
         tables.forEach(t => {
             let used = t.groups.reduce((a,b)=>a+b.size, 0);
-            let items = t.groups.map(g => `<li>Group ${g.id} (Size: ${g.size})</li>`).join('');
+            seatedCount += used;
+            let itemsHtml = t.groups.map(g => {
+                placementMap.set(g.id, (placementMap.get(g.id) || 0) + 1);
+                return `<li>Group ${g.id} (Size: ${g.size})</li>`;
+            }).join('');
+
+            let status = used > 10 ? 'table-full' : (used === 0 ? 'table-empty' : '');
             grid.innerHTML += `
-                <div class="table-card ${used >= 10 ? 'table-full' : ''}">
-                    <strong>Table ${t.id}</strong> (${used}/10)
-                    <ul>${items || '<li>Empty</li>'}</ul>
+                <div class="table-card ${status}">
+                    <h3>Table ${t.id}</h3>
+                    <ul>${itemsHtml || '<li><em>Empty</em></li>'}</ul>
+                    <div class="seats-left">Occupancy: ${used}/10</div>
                 </div>`;
         });
+
+        placementMap.forEach(count => { if(count > 1) splitCount++; });
+
+        summary.innerHTML = `<ul>
+            <li><strong>${originals.length}</strong> Total Groups</li>
+            <li><strong>${totalPeople}</strong> Total People</li>
+            <li><strong>${seatedCount}</strong> Successfully Seated</li>
+            <li><strong>${splitCount}</strong> Groups Split</li>
+        </ul>`;
     }
 
     document.getElementById('run-btn').onclick = runGA;
     document.getElementById('demo-btn').onclick = () => {
-        document.getElementById('group-sizes').value = Array.from({length: 30}, () => Math.floor(Math.random() * 8) + 2).join(', ');
+        const demoData = Array.from({length: 35}, () => Math.floor(Math.random()*8)+2).join(', ');
+        document.getElementById('group-sizes').value = demoData;
         runGA();
     };
 </script>
