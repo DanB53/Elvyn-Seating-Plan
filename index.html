@@ -6,7 +6,7 @@
     <title>Elvyn Ball Seating Plan Generator</title>
     <style>
         body { font-family: "Inter", sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; line-height: 1.6; }
-        .container { max-width: 1100px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; }
         header, .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         h1 { color: #2c3e50; margin: 0; font-size: 1.5rem; }
         .inputs { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
@@ -16,22 +16,26 @@
         button { padding: 12px 20px; background-color: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
         button:hover { background-color: #2980b9; }
         #demo-btn { background-color: #2ecc71; }
-        #demo-btn:hover { background-color: #27ae60; }
         
-        #summary-report ul { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
-        #summary-report li { background: #ecf0f1; padding: 15px; border-radius: 8px; font-size: 0.95rem; }
-        #summary-report li strong { display: block; color: #2c3e50; font-size: 1.1rem; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .summary-item { background: #ecf0f1; padding: 15px; border-radius: 8px; }
+        .summary-item strong { display: block; color: #2c3e50; font-size: 1.1rem; }
 
-        .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
-        .table-card { background: white; border-radius: 12px; border-top: 5px solid #3498db; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .table-full { border-top-color: #e74c3c; }
-        .table-empty { border-top-color: #2ecc71; }
-        .table-card h3 { margin: 0 0 10px 0; font-size: 1.1rem; }
-        .table-card ul { list-style: none; padding: 0; margin: 0; }
-        .table-card li { padding: 6px; background: #f9f9f9; margin-bottom: 4px; border-radius: 4px; font-size: 0.9rem; border: 1px solid #eee; }
-        .seats-left { margin-top: 10px; font-weight: bold; color: #7f8c8d; font-size: 0.9rem; }
+        .advanced-card { background: #2c3e50; color: #ecf0f1; border-left: 5px solid #e67e22; }
+        .advanced-card h3 { color: #e67e22; margin-top: 0; }
+        .cost-breakdown { font-family: monospace; font-size: 0.9rem; }
+        .cost-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #34495e; }
 
-        #console-log { background: #2c3e50; color: #ecf0f1; padding: 15px; height: 120px; overflow-y: auto; font-family: monospace; font-size: 12px; border-radius: 8px; }
+        .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+        .table-card { background: white; border-radius: 12px; border-top: 6px solid #3498db; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .table-over { border-top-color: #e74c3c; background: #fff5f5; }
+        .table-card h3 { margin: 0 0 10px 0; }
+        .table-card ul { list-style: none; padding: 0; }
+        .table-card li { padding: 5px; background: #f9f9f9; margin-bottom: 3px; border-radius: 4px; font-size: 0.85rem; border: 1px solid #eee; }
+        .seats-left { margin-top: 10px; font-weight: bold; font-size: 0.9rem; }
+        .limit-warn { color: #e74c3c; font-weight: 800; }
+
+        #console-log { background: #1a252f; color: #95a5a6; padding: 10px; height: 100px; overflow-y: auto; font-family: monospace; font-size: 11px; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -42,7 +46,7 @@
     <div class="card inputs">
         <div class="input-group">
             <label>Group Sizes (comma-separated)</label>
-            <input type="text" id="group-sizes" value="10, 10, 8, 5, 2, 10, 10, 10, 6, 4, 10, 10, 5">
+            <input type="text" id="group-sizes" value="10, 10, 8, 5, 2, 11, 10, 10, 6, 4, 10, 10, 5">
         </div>
         <div class="input-group" style="flex: 0 0 100px;">
             <label>Tables</label>
@@ -53,16 +57,20 @@
     </div>
 
     <div id="results" style="display:none;">
-        <h2>📈 Summary Report</h2>
-        <div id="summary-report" class="card"></div>
+        <h2>📊 Summary Report</h2>
+        <div class="summary-grid" id="summary-report"></div>
+
+        <div class="card advanced-card">
+            <h3>⚙️ Advanced View (Cost Analysis)</h3>
+            <div id="cost-analysis" class="cost-breakdown"></div>
+        </div>
         
         <h2>🍽️ Table View</h2>
         <div class="table-grid" id="table-view"></div>
     </div>
 
     <div class="card">
-        <h3 style="margin-top:0">Backend Activity</h3>
-        <div id="console-log">Ready to process...</div>
+        <div id="console-log">Ready...</div>
     </div>
 </div>
 
@@ -75,142 +83,126 @@
         logEl.scrollTop = logEl.scrollHeight;
     };
 
-    // Fast cloning to avoid JSON.stringify overhead
     function cloneTables(tables) {
-        return tables.map(t => ({
-            id: t.id,
-            capacity: 10,
-            groups: t.groups.map(g => ({ ...g }))
-        }));
+        return tables.map(t => ({ id: t.id, groups: t.groups.map(g => ({ ...g })) }));
     }
 
     async function runGA() {
         resultsArea.style.display = 'none';
         logEl.innerHTML = '';
-        log("🚀 Initializing Algorithm...");
+        log("🚀 Checking hard limits (Max 11 per table)...");
 
         const rawSizes = document.getElementById('group-sizes').value.split(',').map(n => parseInt(n.trim())).filter(n => n > 0);
         const tableCount = parseInt(document.getElementById('num-tables').value) || 1;
         const originalGroups = rawSizes.map((size, i) => ({ id: i + 1, size }));
 
-        // 1. Initial Seating (Greedy First-Fit)
-        let currentTables = generateGreedySeed(originalGroups, tableCount);
-        let currentFitness = calcFitness(currentTables, originalGroups);
-        let bestTables = cloneTables(currentTables);
-        let bestFitness = currentFitness;
+        let bestTables = generateSeed(originalGroups, tableCount);
+        let bestScoreObj = calcDetailedScore(bestTables, originalGroups);
 
-        // 2. Evolution
-        for (let gen = 0; gen < 150; gen++) {
+        for (let gen = 0; gen < 200; gen++) {
             let candidate = mutate(cloneTables(bestTables));
-            let cFitness = calcFitness(candidate, originalGroups);
+            let cScoreObj = calcDetailedScore(candidate, originalGroups);
 
-            // If better or equal (to allow exploration), accept
-            if (cFitness >= bestFitness) {
-                bestFitness = cFitness;
+            if (cScoreObj.totalFitness >= bestScoreObj.totalFitness) {
+                bestScoreObj = cScoreObj;
                 bestTables = candidate;
             }
 
-            if (gen % 25 === 0) {
-                log(`Generation ${gen}... Current Cost Score: ${10000 - bestFitness}`);
+            if (gen % 40 === 0) {
+                log(`Gen ${gen}: Best Score ${bestScoreObj.totalFitness}`);
                 await new Promise(r => setTimeout(r, 1));
             }
         }
 
-        log("✅ Optimal Seating Found.");
-        render(bestTables, originalGroups);
+        render(bestTables, originalGroups, bestScoreObj);
     }
 
-    function generateGreedySeed(groups, count) {
+    function generateSeed(groups, count) {
         let tables = Array.from({length: count}, (_, i) => ({ id: i+1, groups: [] }));
-        let sorted = [...groups].sort((a,b) => b.size - a.size);
-
-        sorted.forEach(g => {
-            let placed = false;
-            for(let t of tables) {
-                let used = t.groups.reduce((a,b)=>a+b.size, 0);
-                if (used + g.size <= 10) {
-                    t.groups.push({ id: g.id, size: g.size });
-                    placed = true; break;
-                }
-            }
-            if (!placed) tables[Math.floor(Math.random()*count)].groups.push({ id: g.id, size: g.size });
+        groups.sort((a,b) => b.size - a.size).forEach(g => {
+            let t = tables.find(tab => tab.groups.reduce((a,b)=>a+b.size, 0) + g.size <= 11);
+            if (t) t.groups.push({ id: g.id, size: g.size });
+            else tables[Math.floor(Math.random()*count)].groups.push({ id: g.id, size: g.size });
         });
         return tables;
     }
 
-    function calcFitness(tables, originals) {
-        let score = 10000;
-        let groupPlacements = new Map();
+    function calcDetailedScore(tables, originals) {
+        let costs = { overfill: 0, splits: 0, isolation: 0, empty: 0 };
+        let placementMap = new Map();
 
         tables.forEach(t => {
-            let used = 0;
+            let used = t.groups.reduce((a,b)=>a+b.size, 0);
+            if (used > 11) costs.overfill += (used - 11) * 5000; // Hard limit penalty
+            if (used > 0 && used < 4) costs.empty += 50; 
+            
             t.groups.forEach(g => {
-                used += g.size;
-                groupPlacements.set(g.id, (groupPlacements.get(g.id) || 0) + 1);
+                placementMap.set(g.id, (placementMap.get(g.id) || 0) + 1);
+                if (g.size === 1) costs.isolation += 100;
             });
-            if (used > 10) score -= (used - 10) * 1000; // Heavy penalty for overfilled
-            if (used < 5 && used > 0) score -= 50; // Penalty for very empty tables
         });
 
-        groupPlacements.forEach((count, id) => {
-            if (count > 1) score -= (count - 1) * 200; // Penalty for splitting groups
+        placementMap.forEach((count, id) => {
+            if (count > 1) costs.splits += (count - 1) * 300;
         });
 
-        return score;
+        let totalPenalty = costs.overfill + costs.splits + costs.isolation + costs.empty;
+        return { totalFitness: 20000 - totalPenalty, costs };
     }
 
     function mutate(tables) {
         let t1 = tables[Math.floor(Math.random() * tables.length)];
         let t2 = tables[Math.floor(Math.random() * tables.length)];
         if (t1.groups.length > 0) {
-            let part = t1.groups.splice(Math.floor(Math.random()*t1.groups.length), 1)[0];
-            t2.groups.push(part);
+            let gIdx = Math.floor(Math.random()*t1.groups.length);
+            t2.groups.push(t1.groups.splice(gIdx, 1)[0]);
         }
         return tables;
     }
 
-    function render(tables, originals) {
+    function render(tables, originals, scoreObj) {
         resultsArea.style.display = 'block';
         const summary = document.getElementById('summary-report');
+        const analysis = document.getElementById('cost-analysis');
         const grid = document.getElementById('table-view');
         
-        let totalPeople = originals.reduce((a,b)=>a+b.size, 0);
-        let seatedCount = 0;
-        let splitCount = 0;
-        let placementMap = new Map();
-
         grid.innerHTML = '';
+        let totalSplits = 0;
+        let illegalTables = 0;
+
         tables.forEach(t => {
             let used = t.groups.reduce((a,b)=>a+b.size, 0);
-            seatedCount += used;
-            let itemsHtml = t.groups.map(g => {
-                placementMap.set(g.id, (placementMap.get(g.id) || 0) + 1);
-                return `<li>Group ${g.id} (Size: ${g.size})</li>`;
-            }).join('');
-
-            let status = used > 10 ? 'table-full' : (used === 0 ? 'table-empty' : '');
+            if (used > 11) illegalTables++;
+            let items = t.groups.map(g => `<li>Group ${g.id}: ${g.size} people</li>`).join('');
             grid.innerHTML += `
-                <div class="table-card ${status}">
+                <div class="table-card ${used > 11 ? 'table-over' : ''}">
                     <h3>Table ${t.id}</h3>
-                    <ul>${itemsHtml || '<li><em>Empty</em></li>'}</ul>
-                    <div class="seats-left">Occupancy: ${used}/10</div>
+                    <ul>${items || '<li><em>Empty</em></li>'}</ul>
+                    <div class="seats-left ${used > 11 ? 'limit-warn' : ''}">
+                        Occupancy: ${used} / 11 ${used > 11 ? '⚠️ EXCEEDS LIMIT' : ''}
+                    </div>
                 </div>`;
         });
 
-        placementMap.forEach(count => { if(count > 1) splitCount++; });
+        summary.innerHTML = `
+            <div class="summary-item"><strong>${originals.length}</strong> Groups</div>
+            <div class="summary-item"><strong>${originals.reduce((a,b)=>a+b.size,0)}</strong> People</div>
+            <div class="summary-item"><strong>${illegalTables}</strong> Limit Violations</div>
+            <div class="summary-item" style="background:#fef9e7"><strong>${scoreObj.totalFitness}</strong> Fitness Score</div>
+        `;
 
-        summary.innerHTML = `<ul>
-            <li><strong>${originals.length}</strong> Total Groups</li>
-            <li><strong>${totalPeople}</strong> Total People</li>
-            <li><strong>${seatedCount}</strong> Successfully Seated</li>
-            <li><strong>${splitCount}</strong> Groups Split</li>
-        </ul>`;
+        analysis.innerHTML = `
+            <div class="cost-item"><span>Violation Penalty (Over 11)</span> <span>-${scoreObj.costs.overfill}</span></div>
+            <div class="cost-item"><span>Split Group Penalty</span> <span>-${scoreObj.costs.splits}</span></div>
+            <div class="cost-item"><span>Social Isolation (Size 1) Penalty</span> <span>-${scoreObj.costs.isolation}</span></div>
+            <div class="cost-item"><span>Low Occupancy Penalty</span> <span>-${scoreObj.costs.empty}</span></div>
+            <div class="cost-item" style="border-top:1px solid #fff; font-weight:bold; margin-top:5px;"><span>TOTAL PENALTY</span> <span>-${20000 - scoreObj.totalFitness}</span></div>
+        `;
     }
 
     document.getElementById('run-btn').onclick = runGA;
     document.getElementById('demo-btn').onclick = () => {
-        const demoData = Array.from({length: 35}, () => Math.floor(Math.random()*8)+2).join(', ');
-        document.getElementById('group-sizes').value = demoData;
+        document.getElementById('group-sizes').value = Array.from({length: 30}, () => Math.floor(Math.random()*9)+2).join(', ');
         runGA();
     };
 </script>
