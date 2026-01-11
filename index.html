@@ -3,209 +3,424 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elvyn Ball Seating Plan Generator</title>
+    <title>Elvyn Ball Seating Plan Generator Pro</title>
     <style>
-        body { font-family: "Inter", sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; line-height: 1.6; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        header, .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        h1 { color: #2c3e50; margin: 0; font-size: 1.5rem; }
-        .inputs { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
-        .input-group { flex: 1 1 200px; }
-        label { display: block; font-weight: 600; margin-bottom: 8px; color: #555; }
-        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-        button { padding: 12px 20px; background-color: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
-        button:hover { background-color: #2980b9; }
-        #demo-btn { background-color: #2ecc71; }
+        :root {
+            --primary: #3498db; --success: #2ecc71; --danger: #e74c3c;
+            --warning: #f39c12; --dark: #2c3e50; --light: #f4f7f6;
+            --border: #dcdde1; --flex-color: #9b59b6; --lend-color: #f1c40f;
+        }
+        body { font-family: "Inter", -apple-system, sans-serif; background-color: var(--light); margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; }
         
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .summary-item { background: #ecf0f1; padding: 15px; border-radius: 8px; }
-        .summary-item strong { display: block; color: #2c3e50; font-size: 1.1rem; }
+        header { margin-bottom: 25px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        header h1 { color: var(--dark); margin: 0; font-size: 2rem; }
 
-        .advanced-card { background: #2c3e50; color: #ecf0f1; border-left: 5px solid #e67e22; }
-        .advanced-card h3 { color: #e67e22; margin-top: 0; }
-        .cost-breakdown { font-family: monospace; font-size: 0.9rem; }
-        .cost-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #34495e; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .full-row { margin-bottom: 20px; }
+        .full-row input { width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
 
-        .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
-        .table-card { background: white; border-radius: 12px; border-top: 6px solid #3498db; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .table-over { border-top-color: #e74c3c; background: #fff5f5; }
-        .table-card h3 { margin: 0 0 10px 0; }
-        .table-card ul { list-style: none; padding: 0; }
-        .table-card li { padding: 5px; background: #f9f9f9; margin-bottom: 3px; border-radius: 4px; font-size: 0.85rem; border: 1px solid #eee; }
-        .seats-left { margin-top: 10px; font-weight: bold; font-size: 0.9rem; }
-        .limit-warn { color: #e74c3c; font-weight: 800; }
+        .control-bar { display: flex; justify-content: space-between; align-items: flex-end; gap: 40px; margin-bottom: 25px; }
+        .table-input-wrap { flex: 1; }
+        .slider-wrap { flex: 2; background: #fdfdfd; padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+        input[type="number"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
 
-        #console-log { background: #1a252f; color: #95a5a6; padding: 10px; height: 100px; overflow-y: auto; font-family: monospace; font-size: 11px; border-radius: 8px; }
+        /* Tooltip Toggles */
+        .rule-bar { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid #eee; }
+        .toggle-mini { 
+            position: relative; display: flex; align-items: center; gap: 8px; 
+            font-size: 0.85rem; font-weight: 600; cursor: help; 
+            background: white; padding: 8px 15px; border-radius: 20px; 
+            border: 1px solid var(--border); transition: 0.2s; 
+        }
+        .toggle-mini:hover { border-color: var(--primary); background: #f0f7ff; }
+        
+        .tooltip {
+            visibility: hidden; width: 220px; background-color: var(--dark);
+            color: #fff; text-align: center; border-radius: 6px;
+            padding: 10px; position: absolute; z-index: 10;
+            bottom: 125%; left: 50%; margin-left: -110px;
+            opacity: 0; transition: opacity 0.3s; font-weight: 400; font-size: 0.75rem;
+            line-height: 1.4; pointer-events: none;
+        }
+        .toggle-mini:hover .tooltip { visibility: visible; opacity: 1; }
+
+        /* Floor Plan Styles */
+        .floor-plan-container { 
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; 
+            background: #cbd5e0; padding: 25px; border-radius: 15px; min-height: 600px;
+        }
+        .grid-slot {
+            background: rgba(0,0,0,0.05); border: 2px dashed rgba(0,0,0,0.1);
+            border-radius: 12px; min-height: 240px; position: relative;
+        }
+        .table-card { 
+            background: white; border-radius: 10px; border-top: 6px solid var(--primary); 
+            padding: 15px; cursor: grab; box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            width: 100%; height: 100%; box-sizing: border-box;
+        }
+        .table-card.color-flex { border-top-color: var(--flex-color); }
+        .table-card.color-lend { border-top-color: var(--lend-color); }
+        .table-card.color-full { border-top-color: var(--success); }
+
+        .table-name-input { border: none; background: transparent; font-weight: 800; width: 60%; color: var(--dark); font-size: 1rem; }
+        .guest-item { padding: 6px 10px; background: #f8f9fa; border: 1px solid #eee; margin-bottom: 4px; border-radius: 6px; font-size: 0.8rem; display: flex; justify-content: space-between; }
+        .is-split { border-left: 3px solid var(--warning); background: #fffcf0; }
+        
+        /* Validation Audit */
+        .validation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .val-card { padding: 15px; border-radius: 10px; border-left: 8px solid #ccc; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .val-card h4 { margin: 0 0 5px 0; }
+        .val-card .stats { font-weight: 800; font-size: 1.1rem; color: var(--dark); display: block; margin-bottom: 5px; }
+        .val-card ul { margin: 8px 0 0 0; padding-left: 18px; font-size: 0.75rem; color: #555; max-height: 80px; overflow-y: auto; }
+        .pass { border-left-color: var(--success); background: #f0fff4; }
+        .fail { border-left-color: var(--danger); background: #fff5f5; }
+
+        #console-log { background: #1e272e; color: #d2dae2; padding: 15px; height: 180px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; border-radius: 8px; border: 1px solid #333; margin-top: 20px; }
+        .progress-container { height: 8px; background: #eee; border-radius: 4px; margin: 20px 0; display: none; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.3s; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <header><h1>Elvyn Ball Seating Plan Generator</h1></header>
+    <header><h1>Elvyn Ball Seating Plan Pro</h1></header>
 
-    <div class="card inputs">
-        <div class="input-group">
-            <label>Group Sizes (comma-separated)</label>
-            <input type="text" id="group-sizes" value="10, 10, 8, 5, 2, 11, 10, 10, 6, 4, 10, 10, 5">
+    <div class="card">
+        <div class="full-row">
+            <label>1. Group Sizes (Inventory: Tables × 10)</label>
+            <input type="text" id="group-sizes" value="8, 5, 10, 2, 9, 1, 11, 6, 8, 9, 7, 5, 4, 2, 7, 1, 1, 11, 1, 7, 10, 10, 3, 8, 6, 8, 7, 10, 9, 8, 3, 4, 6, 8, 6, 4">
         </div>
-        <div class="input-group" style="flex: 0 0 100px;">
-            <label>Tables</label>
-            <input type="number" id="num-tables" value="23">
+
+        <div class="control-bar">
+            <div class="table-input-wrap">
+                <label>2. Number of Tables</label>
+                <input type="number" id="num-tables" value="23" min="1">
+                <span style="font-size: 0.85rem; color: #666;">Each table is 10 seats</span>
+            </div>
+            <div class="slider-wrap">
+                <label>3. Optimization Tries (Max Passes: <span id="pass-val">250</span>)</label>
+                <input type="range" id="run-passes" min="1" max="1000" value="250" style="width: 100%; cursor: pointer;">
+                <span style="font-size: 0.75rem; color: #666;">More passes increase chances of better seating but take longer.</span>
+            </div>
         </div>
-        <button id="run-btn">Run Genetic Algorithm</button>
-        <button id="demo-btn">Run Demo</button>
+
+        <label>4. Logic Constraints</label>
+        <div class="rule-bar">
+            <label class="toggle-mini"><input type="checkbox" id="rule-isolation" checked> No Isolation<span class="tooltip">Fragments must be ≥ 2.</span></label>
+            <label class="toggle-mini"><input type="checkbox" id="rule-adjacency" checked> Neighbor Splits<span class="tooltip">Adjacent IDs only.</span></label>
+            <label class="toggle-mini"><input type="checkbox" id="rule-flex" checked> Allow Flex (11)<span class="tooltip">Borrow seats from room pool.</span></label>
+            <label class="toggle-mini"><input type="checkbox" id="rule-dual-split" checked> Max Dual Split<span class="tooltip">Group cannot be split across 3+ tables.</span></label>
+        </div>
+
+        <div class="progress-container" id="prog-cont"><div class="progress-fill" id="prog-fill"></div></div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button id="run-btn" style="background: var(--primary); color: white; flex: 2; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">🚀 Run Algorithm</button>
+            <button id="demo-btn" style="background: white; border: 1px solid var(--border); flex: 1; border-radius: 8px; cursor: pointer;">🎲 Load Random Demo</button>
+        </div>
     </div>
 
     <div id="results" style="display:none;">
-        <h2>📊 Summary Report</h2>
-        <div class="summary-grid" id="summary-report"></div>
-
-        <div class="card advanced-card">
-            <h3>⚙️ Advanced View (Cost Analysis)</h3>
-            <div id="cost-analysis" class="cost-breakdown"></div>
-        </div>
-        
-        <h2>🍽️ Table View</h2>
-        <div class="table-grid" id="table-view"></div>
+        <h3>📋 Constraint Audit Deep-Dive</h3>
+        <div class="validation-grid" id="validation-panel"></div>
+        <div class="fail-warning"></div>
+        <h3>Interactive Layout (Drag to Swap)</h3>
+        <div class="floor-plan-container" id="floor-plan"></div>
     </div>
 
     <div class="card">
+        <label>Diagnostic Backend Log</label>
         <div id="console-log">Ready...</div>
     </div>
 </div>
 
 <script>
+    const COSTS = { UNSEATED: 1e9, GAP: 5e5, SPLIT: 1e5, FLEX: 1e4, TOGETHER: 2e5, ISOLATION: 5e6, MULTI_SPLIT: 5e6 };
+    const PERFECT_SCORE = 1e9;
     const logEl = document.getElementById('console-log');
     const resultsArea = document.getElementById('results');
+    const passSlider = document.getElementById('run-passes');
+    const passVal = document.getElementById('pass-val');
+
+    passSlider.oninput = function() { passVal.innerText = this.value; }
 
     const log = (msg) => {
         logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
         logEl.scrollTop = logEl.scrollHeight;
     };
 
-    function cloneTables(tables) {
-        return tables.map(t => ({ id: t.id, groups: t.groups.map(g => ({ ...g })) }));
-    }
+    function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+    document.getElementById('demo-btn').onclick = () => {
+        log("Loading random list for 225 guests...");
+        let groups = []; let total = 0;
+        while (total < 225) {
+            let size = Math.floor(Math.random() * 10) + 1;
+            if (total + size > 225) size = 225 - total;
+            groups.push(size); total += size;
+        }
+        document.getElementById('group-sizes').value = groups.join(', ');
+    };
 
     async function runGA() {
-        resultsArea.style.display = 'none';
-        logEl.innerHTML = '';
-        log("🚀 Checking hard limits (Max 11 per table)...");
-
         const rawSizes = document.getElementById('group-sizes').value.split(',').map(n => parseInt(n.trim())).filter(n => n > 0);
-        const tableCount = parseInt(document.getElementById('num-tables').value) || 1;
-        const originalGroups = rawSizes.map((size, i) => ({ id: i + 1, size }));
+        const tableCount = parseInt(document.getElementById('num-tables').value);
+        const totalPeople = rawSizes.reduce((a,b) => a+b, 0);
+        const globalInventory = tableCount * 10;
 
-        let bestTables = generateSeed(originalGroups, tableCount);
-        let bestScoreObj = calcDetailedScore(bestTables, originalGroups);
-
-        for (let gen = 0; gen < 200; gen++) {
-            let candidate = mutate(cloneTables(bestTables));
-            let cScoreObj = calcDetailedScore(candidate, originalGroups);
-
-            if (cScoreObj.totalFitness >= bestScoreObj.totalFitness) {
-                bestScoreObj = cScoreObj;
-                bestTables = candidate;
-            }
-
-            if (gen % 40 === 0) {
-                log(`Gen ${gen}: Best Score ${bestScoreObj.totalFitness}`);
-                await new Promise(r => setTimeout(r, 1));
-            }
+        if (totalPeople > (tableCount * 11)) {
+            alert(`⚠️ OVER PHYSICS LIMIT!\nTotal Guests: ${totalPeople}\nAbsolute Max with Flex: ${tableCount * 11}\n\nYou cannot physically fit this many people.`);
+            return;
         }
 
-        render(bestTables, originalGroups, bestScoreObj);
+        resultsArea.style.display = 'none'; logEl.innerHTML = '';
+        document.getElementById('prog-cont').style.display = 'block';
+        
+        const originals = rawSizes.map((size, i) => ({ id: i + 1, size }));
+        const totalPasses = parseInt(passSlider.value);
+        let bestOverall = null;
+        let bestOverallScore = -Infinity;
+
+        log(`--- INITIALIZING: ${totalPasses} PASSES ---`);
+
+        for (let p = 1; p <= totalPasses; p++) {
+            document.getElementById('prog-fill').style.width = `${(p / totalPasses) * 100}%`;
+            let currentRun = generateSeed(originals, tableCount, globalInventory);
+            let currentBestScore = -Infinity;
+
+            for (let gen = 0; gen < 800; gen++) {
+                let candidate = mutate(clone(currentRun));
+                candidate = repair(candidate, originals, globalInventory);
+                let score = calcScore(candidate, originals).fitness;
+                if (score > currentBestScore) { currentRun = candidate; currentBestScore = score; }
+            }
+
+            currentRun = linearRefine(currentRun, originals, globalInventory);
+            let finalScore = calcScore(currentRun, originals).fitness;
+            
+            if (finalScore > bestOverallScore) { 
+                bestOverallScore = finalScore; 
+                bestOverall = currentRun; 
+                log(`Pass ${p}: New Record Found (Score: ${Math.floor(finalScore/1000)}k)`);
+            } else {
+                log(`Pass ${p}: optimization complete.`);
+            }
+
+            if (finalScore >= PERFECT_SCORE) {
+                log(`<span style="color:var(--success)">🌟 PERFECT FIT DETECTED. Halting search early.</span>`);
+                break;
+            }
+            await new Promise(r => setTimeout(r, 1)); 
+        }
+
+        renderFloorPlan(bestOverall, originals, totalPeople, globalInventory);
+        document.getElementById('prog-cont').style.display = 'none';
     }
 
-    function generateSeed(groups, count) {
+    function generateSeed(groups, count, globalCap) {
         let tables = Array.from({length: count}, (_, i) => ({ id: i+1, groups: [] }));
-        groups.sort((a,b) => b.size - a.size).forEach(g => {
-            let t = tables.find(tab => tab.groups.reduce((a,b)=>a+b.size, 0) + g.size <= 11);
-            if (t) t.groups.push({ id: g.id, size: g.size });
-            else tables[Math.floor(Math.random()*count)].groups.push({ id: g.id, size: g.size });
+        let sorted = [...groups].sort((a,b) => b.size - a.size);
+        sorted.forEach(g => {
+            let t = tables.find(tab => (tab.groups.reduce((a,b)=>a+b.size,0) + g.size) <= 10);
+            if(t) t.groups.push({ id: g.id, size: g.size });
+            else {
+                let rem = g.size;
+                for(let tab of tables) {
+                    let space = 11 - tab.groups.reduce((a,b)=>a+b.size,0);
+                    if (space >= 1) {
+                        let take = Math.min(rem, space);
+                        if (rem - take === 1 && g.size > 1 && take > 1) take--;
+                        tab.groups.push({ id: g.id, size: take }); rem -= take;
+                    }
+                    if (rem <= 0) break;
+                }
+            }
         });
         return tables;
     }
 
-    function calcDetailedScore(tables, originals) {
-        let costs = { overfill: 0, splits: 0, isolation: 0, empty: 0 };
-        let placementMap = new Map();
+    function repair(tables, originals, globalCap) {
+        const allowFlex = document.getElementById('rule-flex').checked;
+        let seatedMap = new Map();
+        tables.forEach(t => {
+            while (t.groups.reduce((a,b)=>a+b.size, 0) > (allowFlex ? 11 : 10)) t.groups.pop();
+            t.groups.forEach(g => seatedMap.set(g.id, (seatedMap.get(g.id) || 0) + g.size));
+        });
+        originals.forEach(og => {
+            let needed = og.size - (seatedMap.get(og.id) || 0);
+            while (needed > 0) {
+                let t = tables.find(tab => ((allowFlex ? 11 : 10) - tab.groups.reduce((a,b)=>a+b.size,0)) >= 1);
+                if (!t) break;
+                let take = Math.min(needed, (allowFlex ? 11 : 10) - t.groups.reduce((a,b)=>a+b.size,0));
+                t.groups.push({ id: og.id, size: take }); needed -= take;
+            }
+        });
+        return tables;
+    }
+
+    function linearRefine(tables, originals, globalCap) {
+        let refined = clone(tables);
+        const doIso = document.getElementById('rule-isolation').checked;
+        let pm = new Map();
+        refined.forEach(t => t.groups.forEach(g => {
+            if(!pm.has(g.id)) pm.set(g.id, []);
+            pm.get(g.id).push({ tId: t.id, size: g.size });
+        }));
+        pm.forEach((parts, gid) => {
+            let og = originals.find(o => o.id === gid);
+            if (doIso && og.size > 1 && parts.some(p => p.size === 1)) {
+                refined.forEach(t => t.groups = t.groups.filter(g => g.id !== gid));
+                for (let t of refined) {
+                    if (t.groups.reduce((a,b)=>a+b.size,0) + og.size <= 11) {
+                        t.groups.push({ id: gid, size: og.size }); break;
+                    }
+                }
+            }
+        });
+        return refined;
+    }
+
+    function calcScore(tables, originals) {
+        let fitness = PERFECT_SCORE;
+        let seatedMap = new Map();
+        const doIso = document.getElementById('rule-isolation').checked;
+        const doLimit = document.getElementById('rule-dual-split').checked;
 
         tables.forEach(t => {
-            let used = t.groups.reduce((a,b)=>a+b.size, 0);
-            if (used > 11) costs.overfill += (used - 11) * 5000; // Hard limit penalty
-            if (used > 0 && used < 4) costs.empty += 50; 
-            
+            if (t.groups.reduce((a,b)=>a+b.size,0) === 11) fitness -= COSTS.FLEX;
             t.groups.forEach(g => {
-                placementMap.set(g.id, (placementMap.get(g.id) || 0) + 1);
-                if (g.size === 1) costs.isolation += 100;
+                if(!seatedMap.has(g.id)) seatedMap.set(g.id, []);
+                seatedMap.get(g.id).push(t.id);
+                if (doIso && g.size === 1 && originals.find(o=>o.id===g.id).size > 1) fitness -= COSTS.ISOLATION;
             });
         });
-
-        placementMap.forEach((count, id) => {
-            if (count > 1) costs.splits += (count - 1) * 300;
+        originals.forEach(og => {
+            let ids = seatedMap.get(og.id) || [];
+            if (ids.length === 0) fitness -= COSTS.UNSEATED;
+            if (ids.length > 1) {
+                fitness -= (ids.length - 1) * COSTS.SPLIT;
+                if (doLimit && ids.length > 2) fitness -= COSTS.MULTI_SPLIT;
+                ids.sort((a,b)=>a-b);
+                for(let i=0; i<ids.length-1; i++) if(Math.abs(ids[i]-ids[i+1]) > 1) fitness -= COSTS.GAP;
+            }
         });
-
-        let totalPenalty = costs.overfill + costs.splits + costs.isolation + costs.empty;
-        return { totalFitness: 20000 - totalPenalty, costs };
+        return { fitness };
     }
 
     function mutate(tables) {
         let t1 = tables[Math.floor(Math.random() * tables.length)];
         let t2 = tables[Math.floor(Math.random() * tables.length)];
-        if (t1.groups.length > 0) {
-            let gIdx = Math.floor(Math.random()*t1.groups.length);
-            t2.groups.push(t1.groups.splice(gIdx, 1)[0]);
-        }
+        if (t1.groups.length > 0) t2.groups.push(t1.groups.splice(Math.floor(Math.random()*t1.groups.length), 1)[0]);
         return tables;
     }
 
-    function render(tables, originals, scoreObj) {
+    function renderFloorPlan(tables, originals, totalPeople, globalCap) {
         resultsArea.style.display = 'block';
-        const summary = document.getElementById('summary-report');
-        const analysis = document.getElementById('cost-analysis');
-        const grid = document.getElementById('table-view');
+        const panel = document.getElementById('validation-panel'); panel.innerHTML = '';
+        const floor = document.getElementById('floor-plan'); floor.innerHTML = '';
         
-        grid.innerHTML = '';
-        let totalSplits = 0;
-        let illegalTables = 0;
+        let seatedTotal = 0, isoErrs = [], adjErrs = [], splitMap = new Map();
+        let flexCount = 0;
 
         tables.forEach(t => {
             let used = t.groups.reduce((a,b)=>a+b.size, 0);
-            if (used > 11) illegalTables++;
-            let items = t.groups.map(g => `<li>Group ${g.id}: ${g.size} people</li>`).join('');
-            grid.innerHTML += `
-                <div class="table-card ${used > 11 ? 'table-over' : ''}">
-                    <h3>Table ${t.id}</h3>
-                    <ul>${items || '<li><em>Empty</em></li>'}</ul>
-                    <div class="seats-left ${used > 11 ? 'limit-warn' : ''}">
-                        Occupancy: ${used} / 11 ${used > 11 ? '⚠️ EXCEEDS LIMIT' : ''}
-                    </div>
-                </div>`;
+            seatedTotal += used;
+            if (used === 11) flexCount++;
+            t.groups.forEach(g => {
+                if(!splitMap.has(g.id)) splitMap.set(g.id, []);
+                splitMap.get(g.id).push(t.id);
+                if (document.getElementById('rule-isolation').checked && g.size === 1 && originals.find(o => o.id === g.id).size > 1) {
+                    isoErrs.push(`Group ${g.id} stranded on Table ${t.id}.`);
+                }
+            });
         });
 
-        summary.innerHTML = `
-            <div class="summary-item"><strong>${originals.length}</strong> Groups</div>
-            <div class="summary-item"><strong>${originals.reduce((a,b)=>a+b.size,0)}</strong> People</div>
-            <div class="summary-item"><strong>${illegalTables}</strong> Limit Violations</div>
-            <div class="summary-item" style="background:#fef9e7"><strong>${scoreObj.totalFitness}</strong> Fitness Score</div>
-        `;
+        splitMap.forEach((ids, gid) => { 
+            if (ids.length > 1) { 
+                ids.sort((a,b)=>a-b); 
+                for(let i=0;i<ids.length-1;i++) {
+                    if(Math.abs(ids[i]-ids[i+1])>1) adjErrs.push(`Group ${gid}: Gap found (T${ids[i]} to T${ids[i+1]}).`);
+                }
+            } 
+        });
 
-        analysis.innerHTML = `
-            <div class="cost-item"><span>Violation Penalty (Over 11)</span> <span>-${scoreObj.costs.overfill}</span></div>
-            <div class="cost-item"><span>Split Group Penalty</span> <span>-${scoreObj.costs.splits}</span></div>
-            <div class="cost-item"><span>Social Isolation (Size 1) Penalty</span> <span>-${scoreObj.costs.isolation}</span></div>
-            <div class="cost-item"><span>Low Occupancy Penalty</span> <span>-${scoreObj.costs.empty}</span></div>
-            <div class="cost-item" style="border-top:1px solid #fff; font-weight:bold; margin-top:5px;"><span>TOTAL PENALTY</span> <span>-${20000 - scoreObj.totalFitness}</span></div>
-        `;
+        const checks = [
+            { label: "Attendance Audit", pass: seatedTotal === totalPeople, val: `${seatedTotal} / ${totalPeople}`, data: [] },
+            { label: "Social Isolation", pass: isoErrs.length === 0, val: isoErrs.length === 0 ? "PASS" : "FAIL", data: isoErrs },
+            { label: "Strict Adjacency", pass: adjErrs.length === 0, val: adjErrs.length === 0 ? "PASS" : "FAIL", data: adjErrs }
+        ];
+
+        checks.forEach(c => {
+            panel.innerHTML += `<div class="val-card ${c.pass ? 'pass' : 'fail'}">
+                <h4>${c.label}</h4>
+                <span class="stats">${c.val}</span>
+                ${c.data.length > 0 ? `<ul>${c.data.slice(0,3).map(d => `<li>${d}</li>`).join("")}</ul>` : ""}
+            </div>`;
+        });
+        document.getElementsByClassName("fail-warning")[0].innerHTML = "";
+        if (checks.some(c => !c.pass)) {
+            document.getElementsByClassName("fail-warning")[0].innerHTML += `<p style="font-size: 0.85rem; color: #666; margin-top: 10px;">If a constraint fails, run it again with more optimisation tries.</p>`;
+        }
+
+        // FIXED: Number of slots exactly matches number of tables
+        const numSlots = tables.length;
+        for(let i=0; i<numSlots; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'grid-slot'; slot.id = `slot-${i}`;
+            slot.ondragover = (e) => e.preventDefault();
+            slot.ondrop = handleDrop;
+            floor.appendChild(slot);
+        }
+
+        let remFlex = flexCount;
+        tables.forEach((t, i) => {
+            let used = t.groups.reduce((a,b)=>a+b.size, 0);
+            let dMax = 10, cClass = "";
+            if (used === 11) { dMax = 11; cClass = "color-flex"; }
+            else if (used < 10 && remFlex > 0) { dMax = 9; remFlex--; cClass = "color-lend"; }
+            else if (used === 10) { dMax = 10; cClass = "color-full"; }
+
+            const card = document.createElement('div');
+            card.className = `table-card ${cClass}`;
+            card.id = `table-${t.id}`;
+            card.draggable = true;
+            card.ondragstart = (e) => e.dataTransfer.setData("text", card.id);
+            
+            let guestHtml = t.groups.map(g => `<div class="guest-item ${splitMap.get(g.id).length > 1 ? 'is-split' : ''}"><span>Group ${g.id}</span> <strong>${g.size}</strong></div>`).join('');
+            card.innerHTML = `<h4><input class="table-name-input" value="Table ${i+1}"> <span>${used} Seats</span></h4>${guestHtml}`;
+            document.getElementById(`slot-${i}`).appendChild(card);
+        });
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData("text");
+        const draggedCard = document.getElementById(draggedId);
+        const targetSlot = e.target.closest('.grid-slot');
+
+        if (targetSlot && draggedCard) {
+            const existingCard = targetSlot.querySelector('.table-card');
+            const sourceSlot = draggedCard.parentElement;
+
+            if (existingCard) {
+                sourceSlot.appendChild(existingCard);
+                targetSlot.appendChild(draggedCard);
+                renumberTable(existingCard, sourceSlot);
+                renumberTable(draggedCard, targetSlot);
+            } else {
+                targetSlot.appendChild(draggedCard);
+                renumberTable(draggedCard, targetSlot);
+            }
+        }
+    }
+
+    function renumberTable(card, slot) {
+        const slotIdx = parseInt(slot.id.replace('slot-', '')) + 1;
+        card.querySelector('.table-name-input').value = `Table ${slotIdx}`;
     }
 
     document.getElementById('run-btn').onclick = runGA;
-    document.getElementById('demo-btn').onclick = () => {
-        document.getElementById('group-sizes').value = Array.from({length: 30}, () => Math.floor(Math.random()*9)+2).join(', ');
-        runGA();
-    };
 </script>
-
 </body>
 </html>
