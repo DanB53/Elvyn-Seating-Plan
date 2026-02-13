@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elvyn Ball Seating Plan Generator Pro</title>
+    <title>Elvyn Ball Seating Plan Generator</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <style>
         :root {
             --primary: #3498db; --success: #2ecc71; --danger: #e74c3c;
@@ -79,16 +80,41 @@
         #console-log { background: #1e272e; color: #d2dae2; padding: 15px; height: 180px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; border-radius: 8px; border: 1px solid #333; margin-top: 20px; }
         .progress-container { height: 8px; background: #eee; border-radius: 4px; margin: 20px 0; display: none; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.3s; }
+        a{
+            text-decoration: underline;
+        }
+        #collapsibleContent {
+        display: none;
+    }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <header><h1>Elvyn Ball Seating Plan Pro</h1></header>
+    <header><h1>Elvyn Ball Seating Plan Generator</h1></header>
+    <a id="toggleSection" style="cursor: pointer;">
+        How to use this tool
+    </a>
+
+    <div id="collapsibleContent">
+        <p>1. Enter the size of each group into the input field below (for example, 8,5,10 means group 1 has 8 people, group 2 has 5 people, etc.)</p>
+        <p>2. Enter the number of tables available (each table is 10 seats)</p>
+        <p>3. Adjust optimization settings if needed</p>
+        <p>4. Click "Run Algorithm" and wait for the results to appear below</p>
+        <p>5. Review the seating plan and make any necessary adjustments</p>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            $("#toggleSection").click(function() {
+                $("#collapsibleContent").slideToggle(300);
+            });
+        });
+    </script>
 
     <div class="card">
         <div class="full-row">
-            <label>1. Group Sizes (Inventory: Tables × 10)</label>
+            <label>1. Group Sizes (Total no. seats: Tables × 10)</label>
             <input type="text" id="group-sizes" value="8, 5, 10, 2, 9, 1, 11, 6, 8, 9, 7, 5, 4, 2, 7, 1, 1, 11, 1, 7, 10, 10, 3, 8, 6, 8, 7, 10, 9, 8, 3, 4, 6, 8, 6, 4">
         </div>
 
@@ -107,9 +133,9 @@
 
         <label>4. Logic Constraints</label>
         <div class="rule-bar">
-            <label class="toggle-mini"><input type="checkbox" id="rule-isolation" checked> No Isolation<span class="tooltip">Fragments must be ≥ 2.</span></label>
-            <label class="toggle-mini"><input type="checkbox" id="rule-adjacency" checked> Neighbor Splits<span class="tooltip">Adjacent IDs only.</span></label>
-            <label class="toggle-mini"><input type="checkbox" id="rule-flex" checked> Allow Flex (11)<span class="tooltip">Borrow seats from room pool.</span></label>
+            <label class="toggle-mini"><input type="checkbox" id="rule-isolation" checked> No Isolation<span class="tooltip">If a group is split, no one person from a group can be sat by themselves.</span></label>
+            <label class="toggle-mini"><input type="checkbox" id="rule-adjacency" checked> Adjacent Tables<span class="tooltip">If a group is split, the group must be sat on tables next to each other.</span></label>
+            <label class="toggle-mini"><input type="checkbox" id="rule-flex" checked> Allow Flexible seats per table (max 11)<span class="tooltip">Allow borrowing an additional seat from a table with leftover seats so a group can be sat together</span></label>
             <label class="toggle-mini"><input type="checkbox" id="rule-dual-split" checked> Max Dual Split<span class="tooltip">Group cannot be split across 3+ tables.</span></label>
         </div>
 
