@@ -66,6 +66,14 @@
 
         .table-name-input { border: none; background: transparent; font-weight: 800; width: 60%; color: var(--dark); font-size: 1rem; }
         .guest-item { padding: 6px 10px; background: #f8f9fa; border: 1px solid #eee; margin-bottom: 4px; border-radius: 6px; font-size: 0.8rem; display: flex; justify-content: space-between; }
+        .table-card.has-violation { outline: 3px solid #e53935; outline-offset: 2px; box-shadow: 0 0 10px rgba(229,57,53,.45); }
+        .table-card.has-split { box-shadow: 0 0 0 2px #f9a825; }
+        .violation-note { color: #c62828; font-size: 0.72rem; font-weight: bold; margin-top: 4px; }
+        .split-chip { display: inline-block; font-size: 0.65rem; color: #fff; border-radius: 8px; padding: 1px 6px; margin-left: 4px; font-weight: bold; }
+        .pair-chip { display: inline-block; font-size: 0.65rem; color: #fff; border-radius: 8px; padding: 1px 6px; margin-left: 4px; font-weight: bold; }
+        .guest-item { cursor: grab; }
+        .grid-slot.drop-hover { border-color: var(--primary); background: rgba(0,0,0,0.1); }
+        .split-legend { font-size: 0.8rem; color: #555; margin: 6px 0; }
         .is-split { border-left: 3px solid var(--warning); background: #fffcf0; }
         
         /* Validation Audit */
@@ -118,6 +126,12 @@
             <input type="text" id="group-sizes" value="8, 5, 10, 2, 9, 1, 11, 6, 8, 9, 7, 5, 4, 2, 7, 1, 1, 11, 1, 7, 10, 10, 3, 8, 6, 8, 7, 10, 9, 8, 3, 4, 6, 8, 6, 4">
         </div>
 
+        <div class="full-row">
+            <label>1b. Groups That Should Sit Near Each Other (optional)</label>
+            <input type="text" id="group-pairs" placeholder="e.g. 1-5, 2-7  (group 1 next to group 5, group 2 next to group 7)">
+            <span style="font-size: 0.75rem; color: #666;">Group numbers follow the order of the sizes above (first = Group 1). "Near" means the same table or a neighbouring table number.</span>
+        </div>
+
         <div class="control-bar">
             <div class="table-input-wrap">
                 <label>2. Number of Tables</label>
@@ -126,7 +140,7 @@
             </div>
             <div class="slider-wrap">
                 <label>3. Optimization Tries (Max Passes: <span id="pass-val">300</span>)</label>
-                <input type="range" id="run-passes" min="1" max="1000" value="300" style="width: 100%; cursor: pointer;">
+                <input type="range" id="run-passes" min="1" max="10000" value="300" style="width: 100%; cursor: pointer;">
                 <span style="font-size: 0.75rem; color: #666;">More passes increase chances of better seating but take longer.</span>
             </div>
         </div>
@@ -151,7 +165,13 @@
         <h3>📋 Constraint Audit Deep-Dive</h3>
         <div class="validation-grid" id="validation-panel"></div>
         <div class="fail-warning"></div>
-        <h3>Interactive Layout (Drag to Swap)</h3>
+        <h3>Interactive Layout (Drag a table to swap · Drag a group onto another table to move it)</h3>
+        <div class="split-legend">
+            <span style="border:2px solid #f9a825; padding:0 6px; border-radius:4px;">Amber outline</span> table holds part of a split group &nbsp;·&nbsp;
+            <span class="split-chip" style="background:#8e24aa;">&harr; T4</span> coloured chip = the other table(s) that group is also on &nbsp;·&nbsp;
+            <span style="border:2px solid #e53935; padding:0 6px; border-radius:4px;">Red outline</span> table breaks a rule (reason shown on the card) &nbsp;·&nbsp;
+            <span class="pair-chip" style="background:#2e7d32;">&#128279; G5</span><span class="pair-chip" style="background:#c62828;">&#128279; G5</span> must-be-near partner: green = met, red = not met
+        </div>
         <div class="floor-plan-container" id="floor-plan"></div>
     </div>
 
@@ -189,6 +209,279 @@
         document.getElementById('group-sizes').value = groups.join(', ');
     };
 
+    // ---------------------------------------------------------------
+    // SOLVER (runs in a Web Worker; falls back to the main thread)
+    //  1. Seed: randomised subset-sum bin packing (fills tables to exactly 10 where possible)
+    //  2. Simulated annealing with swap / move / split moves and in-place undo
+    //  3. Table-order phase (swap + segment reversal) to satisfy adjacency & pair rules
+    //  4. Iterated restarts: alternate fresh seeds with perturbations of the best layout
+    // ---------------------------------------------------------------
+    function solverMain(scope) {
+        const K = 4; // max parts a single group can be split into
+        scope.onmessage = function (ev) {
+            const { sizes, tableCount: n, opts, pairs, passes, COSTS } = ev.data;
+            const G = sizes.length, GK = G * K;
+            const cap = opts.flex ? 11 : 10;
+            const total = sizes.reduce((a, b) => a + b, 0);
+            const minCost = (opts.flex ? Math.max(0, total - 10 * n) : 0) * COSTS.FLEX;
+            const OVER = 1e8;
+
+            const slotSize = new Int32Array(GK), slotTable = new Int32Array(GK);
+            const loads = new Int32Array(n);
+            const gt = new Int32Array(GK), gs = new Int32Array(GK), gm = new Int32Array(G);
+            const uI = new Int32Array(GK + 16), uS = new Int32Array(GK + 16), uT = new Int32Array(GK + 16);
+            let uN = 0;
+            const ri = k => Math.floor(Math.random() * k);
+
+            function setSlot(i, sz, t) {
+                uI[uN] = i; uS[uN] = slotSize[i]; uT[uN] = slotTable[i]; uN++;
+                loads[slotTable[i]] -= slotSize[i];
+                slotSize[i] = sz; slotTable[i] = t;
+                loads[t] += sz;
+            }
+            function revert() {
+                for (let u = uN - 1; u >= 0; u--) {
+                    const i = uI[u];
+                    loads[slotTable[i]] -= slotSize[i];
+                    slotSize[i] = uS[u]; slotTable[i] = uT[u];
+                    loads[slotTable[i]] += slotSize[i];
+                }
+                uN = 0;
+            }
+            function loadState(ss, st) {
+                slotSize.set(ss); slotTable.set(st); loads.fill(0);
+                for (let i = 0; i < GK; i++) loads[slotTable[i]] += slotSize[i];
+            }
+
+            function cost() {
+                let c = 0;
+                for (let t = 0; t < n; t++) {
+                    const l = loads[t];
+                    if (l > cap) c += OVER * (l - cap); else if (l === 11) c += COSTS.FLEX;
+                }
+                for (let g = 0; g < G; g++) {
+                    const base = g * K; let m = 0;
+                    for (let k = 0; k < K; k++) {
+                        const sz = slotSize[base + k]; if (sz <= 0) continue;
+                        const t = slotTable[base + k]; let f = -1;
+                        for (let q = 0; q < m; q++) if (gt[base + q] === t) { f = q; break; }
+                        if (f >= 0) gs[base + f] += sz; else { gt[base + m] = t; gs[base + m] = sz; m++; }
+                    }
+                    gm[g] = m;
+                    if (opts.iso && sizes[g] > 1) for (let q = 0; q < m; q++) if (gs[base + q] === 1) c += COSTS.ISOLATION;
+                    if (m > 1) {
+                        c += (m - 1) * COSTS.SPLIT;
+                        if (opts.dual && m > 2) c += COSTS.MULTI_SPLIT * (m - 2);
+                        if (opts.adj) {
+                            for (let a = 1; a < m; a++) { const v = gt[base + a]; let b = a - 1; while (b >= 0 && gt[base + b] > v) { gt[base + b + 1] = gt[base + b]; b--; } gt[base + b + 1] = v; }
+                            for (let a = 0; a < m - 1; a++) { const d = gt[base + a + 1] - gt[base + a]; if (d > 1) c += COSTS.GAP * (d - 1); }
+                        }
+                    }
+                }
+                for (let p = 0; p < pairs.length; p++) {
+                    const a = pairs[p][0], b = pairs[p][1]; let dmin = 1e9;
+                    for (let x = 0; x < gm[a]; x++) for (let y = 0; y < gm[b]; y++) {
+                        const d = Math.abs(gt[a * K + x] - gt[b * K + y]); if (d < dmin) dmin = d;
+                    }
+                    if (dmin > 1) c += COSTS.TOGETHER * (dmin - 1);
+                }
+                return c;
+            }
+
+            // ---------- moves (all return false if nothing changed) ----------
+            function pickActive() {
+                for (let tries = 0; tries < 20; tries++) { const i = ri(GK); if (slotSize[i] > 0) return i; }
+                return -1;
+            }
+            function slotAt(g, t, except) {
+                for (let k = 0; k < K; k++) { const i = g * K + k; if (i !== except && slotSize[i] > 0 && slotTable[i] === t) return i; }
+                return -1;
+            }
+            function roomyTable(from, need) {
+                for (let tries = 0; tries < 6; tries++) { const c = ri(n); if (c !== from && loads[c] + need <= cap) return c; }
+                return ri(n);
+            }
+            function moveGroup() {
+                const i = pickActive(); if (i < 0) return false;
+                const g = (i / K) | 0, sz = slotSize[i], from = slotTable[i];
+                const t = Math.random() < 0.7 ? roomyTable(from, sz) : ri(n);
+                if (t === from) return false;
+                const j = slotAt(g, t, i);
+                if (j >= 0) { setSlot(j, slotSize[j] + sz, t); setSlot(i, 0, from); } else setSlot(i, sz, t);
+                return true;
+            }
+            function swapParts() {
+                const i = pickActive(), j = pickActive();
+                if (i < 0 || j < 0 || slotTable[i] === slotTable[j]) return false;
+                const ti = slotTable[i], tj = slotTable[j];
+                setSlot(i, slotSize[i], tj); setSlot(j, slotSize[j], ti);
+                return true;
+            }
+            function splitGroup() {
+                const i = pickActive(); if (i < 0) return false;
+                const sz = slotSize[i]; if (sz < 2) return false;
+                const g = (i / K) | 0, from = slotTable[i];
+                const k = (sz >= 4 && Math.random() < 0.8) ? 2 + ri(sz - 3) : 1 + ri(sz - 1);
+                let t = -1;
+                if (Math.random() < 0.5) {
+                    const others = [];
+                    for (let q = 0; q < K; q++) { const s = g * K + q; if (s !== i && slotSize[s] > 0 && slotTable[s] !== from) others.push(slotTable[s]); }
+                    if (others.length) t = others[ri(others.length)];
+                }
+                if (t < 0) t = roomyTable(from, k);
+                if (t === from) return false;
+                let j = slotAt(g, t, i);
+                if (j < 0) { for (let q = 0; q < K; q++) if (slotSize[g * K + q] === 0) { j = g * K + q; break; } }
+                if (j < 0) return false;
+                setSlot(i, sz - k, from); setSlot(j, slotSize[j] + k, t);
+                return true;
+            }
+            function swapTables() {
+                const a = ri(n), b = ri(n); if (a === b) return false;
+                for (let i = 0; i < GK; i++) {
+                    if (slotSize[i] <= 0) continue;
+                    if (slotTable[i] === a) setSlot(i, slotSize[i], b); else if (slotTable[i] === b) setSlot(i, slotSize[i], a);
+                }
+                return true;
+            }
+            function reverseSegment() {
+                let a = ri(n), b = ri(n); if (a === b) return false;
+                if (a > b) { const x = a; a = b; b = x; }
+                for (let i = 0; i < GK; i++) {
+                    if (slotSize[i] > 0 && slotTable[i] >= a && slotTable[i] <= b) setSlot(i, slotSize[i], a + b - slotTable[i]);
+                }
+                return true;
+            }
+            function phase1Move() {
+                const r = Math.random();
+                if (r < 0.30) return moveGroup();
+                if (r < 0.55) return swapParts();
+                if (r < 0.75) return splitGroup();
+                if (r < 0.90) return swapTables();
+                return reverseSegment();
+            }
+            function phase2Move() { return Math.random() < 0.65 ? swapTables() : reverseSegment(); }
+
+            const bestSize = new Int32Array(GK), bestTable = new Int32Array(GK);
+            function anneal(iters, T0, T1, moveFn) {
+                let cur = cost(), bestC = cur;
+                bestSize.set(slotSize); bestTable.set(slotTable);
+                if (bestC <= minCost) return bestC;
+                for (let it = 0; it < iters; it++) {
+                    const T = T0 * Math.pow(T1 / T0, it / iters);
+                    uN = 0;
+                    if (!moveFn()) continue;
+                    const nc = cost(), d = nc - cur;
+                    if (d <= 0 || Math.random() < Math.exp(-d / T)) {
+                        cur = nc;
+                        if (cur < bestC) { bestC = cur; bestSize.set(slotSize); bestTable.set(slotTable); if (bestC <= minCost) break; }
+                    } else revert();
+                }
+                loadState(bestSize, bestTable); uN = 0;
+                return bestC;
+            }
+
+            // ---------- construction: randomised subset-sum packing ----------
+            function put(i, sz, t) { setSlot(i, sz, t); uN = 0; }
+            function construct() {
+                slotSize.fill(0); slotTable.fill(0); loads.fill(0); uN = 0;
+                const order = Array.from({ length: n }, (_, i) => i);
+                for (let i = n - 1; i > 0; i--) { const j = ri(i + 1); const x = order[i]; order[i] = order[j]; order[j] = x; }
+                let ti = 0; const left = []; let items = [];
+                for (let g = 0; g < G; g++) {
+                    if (sizes[g] === 11 && opts.flex) { if (ti < n) put(g * K, 11, order[ti++]); else left.push(g); }
+                    else if (sizes[g] > 10) left.push(g);
+                    else items.push(g);
+                }
+                const key = new Float64Array(G);
+                while (items.length && ti < n) {
+                    items.forEach(g => key[g] = sizes[g] + Math.random() * 1.5);
+                    items.sort((a, b) => key[b] - key[a]);
+                    const reach = new Uint8Array(11), via = new Int32Array(11).fill(-1);
+                    reach[0] = 1;
+                    for (let x = 0; x < items.length; x++) {
+                        const sz = sizes[items[x]];
+                        for (let s = 10; s >= sz; s--) if (reach[s - sz] && !reach[s]) { reach[s] = 1; via[s] = x; }
+                    }
+                    let s = 10; while (s > 0 && !reach[s]) s--;
+                    if (s === 0) break;
+                    const take = new Set();
+                    while (s > 0) { const x = via[s]; take.add(x); s -= sizes[items[x]]; }
+                    const t = order[ti++];
+                    items = items.filter((g, x) => { if (take.has(x)) { put(g * K, sizes[g], t); return false; } return true; });
+                }
+                items.forEach(g => left.push(g));
+                left.sort((a, b) => sizes[b] - sizes[a]);
+                for (const g of left) {
+                    let rem = sizes[g], bestT = -1, bestRoom = 1e9;
+                    for (let t = 0; t < n; t++) { const room = cap - loads[t]; if (room >= rem && room - rem < bestRoom) { bestRoom = room - rem; bestT = t; } }
+                    if (bestT >= 0) { put(g * K, rem, bestT); continue; }
+                    let idx = 0;
+                    while (rem > 0 && idx < K) {
+                        let t = 0; for (let q = 1; q < n; q++) if (loads[q] < loads[t]) t = q;
+                        const room = cap - loads[t]; if (room <= 0) break;
+                        let take = Math.min(rem, room);
+                        if (rem - take === 1 && take > 1) take--;
+                        put(g * K + idx, take, t); idx++; rem -= take;
+                    }
+                    if (rem > 0) {
+                        if (idx === 0) { let t = 0; for (let q = 1; q < n; q++) if (loads[q] < loads[t]) t = q; put(g * K, rem, t); }
+                        else { const i = g * K + idx - 1; put(i, slotSize[i] + rem, slotTable[i]); }
+                    }
+                }
+            }
+            function perturb() {
+                for (let q = 0; q < 8; q++) { uN = 0; const r = Math.random(); (r < 0.4 ? moveGroup : r < 0.7 ? swapParts : splitGroup)(); }
+                uN = 0;
+            }
+
+            // ---------- main loop ----------
+            let gCost = Infinity; const gSize = new Int32Array(GK), gTable = new Int32Array(GK);
+            for (let p = 1; p <= passes; p++) {
+                let T0;
+                if (gCost < Infinity && p % 2 === 0 && Math.random() < 0.7) { loadState(gSize, gTable); perturb(); T0 = 4e4; }
+                else { construct(); T0 = 1e5; }
+                let c = cost();
+                if (c > minCost) c = anneal(6000, T0, 1e3, phase1Move);
+                if (c > minCost) c = anneal(1500, 2e4, 1e3, phase2Move);
+                if (c < gCost) {
+                    gCost = c; gSize.set(slotSize); gTable.set(slotTable);
+                    scope.postMessage({ type: 'log', msg: `Pass ${p}: New Record Found (penalty: ${c === 0 ? 0 : c.toExponential(2)})` });
+                } else scope.postMessage({ type: 'log', msg: `Pass ${p}: optimization complete.` });
+                scope.postMessage({ type: 'progress', p, total: passes });
+                if (gCost <= minCost) { scope.postMessage({ type: 'log', msg: '🌟 PERFECT FIT DETECTED. Halting search early.', perfect: true }); break; }
+            }
+
+            loadState(gSize, gTable);
+            const tables = [];
+            for (let t = 0; t < n; t++) {
+                const gr = new Map();
+                for (let i = 0; i < GK; i++) if (slotSize[i] > 0 && slotTable[i] === t) { const g = (i / K) | 0; gr.set(g, (gr.get(g) || 0) + slotSize[i]); }
+                tables.push({ id: t + 1, groups: [...gr.entries()].map(([g, size]) => ({ id: g + 1, size })).sort((a, b) => b.size - a.size) });
+            }
+            scope.postMessage({ type: 'done', tables, cost: gCost, minCost });
+        };
+    }
+
+    function runSolver(payload, handle) {
+        return new Promise((resolve, reject) => {
+            const onMsg = m => { if (m.type === 'done') resolve(m); else handle(m); };
+            const fallback = () => {
+                log("Web Worker unavailable - running on main thread (page may freeze briefly).");
+                const scope = { postMessage: onMsg };
+                solverMain(scope);
+                setTimeout(() => { try { scope.onmessage({ data: payload }); } catch (e) { reject(e); } }, 20);
+            };
+            let w = null;
+            try { w = new Worker(URL.createObjectURL(new Blob([`(${solverMain.toString()})(self)`], { type: 'text/javascript' }))); } catch (e) { w = null; }
+            if (!w) return fallback();
+            let started = false;
+            w.onmessage = e => { started = true; onMsg(e.data); if (e.data.type === 'done') w.terminate(); };
+            w.onerror = e => { w.terminate(); if (!started) fallback(); else reject(new Error(e.message)); };
+            w.postMessage(payload);
+        });
+    }
+
     async function runGA() {
         const rawSizes = document.getElementById('group-sizes').value.split(',').map(n => parseInt(n.trim())).filter(n => n > 0);
         const tableCount = parseInt(document.getElementById('num-tables').value);
@@ -202,180 +495,106 @@
 
         resultsArea.style.display = 'none'; logEl.innerHTML = '';
         document.getElementById('prog-cont').style.display = 'block';
-        
+        const runBtn = document.getElementById('run-btn'); runBtn.disabled = true;
+
         const originals = rawSizes.map((size, i) => ({ id: i + 1, size }));
         const totalPasses = parseInt(passSlider.value);
-        let bestOverall = null;
-        let bestOverallScore = -Infinity;
-
-        log(`--- INITIALIZING: ${totalPasses} PASSES ---`);
-
-        for (let p = 1; p <= totalPasses; p++) {
-            document.getElementById('prog-fill').style.width = `${(p / totalPasses) * 100}%`;
-            let currentRun = generateSeed(originals, tableCount, globalInventory);
-            let currentBestScore = -Infinity;
-
-            for (let gen = 0; gen < 800; gen++) {
-                let candidate = mutate(clone(currentRun));
-                candidate = repair(candidate, originals, globalInventory);
-                let score = calcScore(candidate, originals).fitness;
-                if (score > currentBestScore) { currentRun = candidate; currentBestScore = score; }
+        const payload = {
+            sizes: rawSizes, tableCount, passes: totalPasses, COSTS,
+            pairs: getPairs(originals).map(([a, b]) => [a - 1, b - 1]),
+            opts: {
+                iso: document.getElementById('rule-isolation').checked,
+                adj: document.getElementById('rule-adjacency').checked,
+                flex: document.getElementById('rule-flex').checked,
+                dual: document.getElementById('rule-dual-split').checked
             }
-
-            currentRun = linearRefine(currentRun, originals, globalInventory);
-            let finalScore = calcScore(currentRun, originals).fitness;
-            
-            if (finalScore > bestOverallScore) { 
-                bestOverallScore = finalScore; 
-                bestOverall = currentRun; 
-                log(`Pass ${p}: New Record Found (Score: ${Math.floor(finalScore/1000)}k)`);
-            } else {
-                log(`Pass ${p}: optimization complete.`);
-            }
-
-            if (finalScore >= PERFECT_SCORE) {
-                log(`<span style="color:var(--success)">🌟 PERFECT FIT DETECTED. Halting search early.</span>`);
-                break;
-            }
-            await new Promise(r => setTimeout(r, 1)); 
+        };
+        log(`--- INITIALIZING: up to ${totalPasses} PASSES ---`);
+        try {
+            const res = await runSolver(payload, m => {
+                if (m.type === 'log') log(m.perfect ? `<span style="color:var(--success)">${m.msg}</span>` : m.msg);
+                else if (m.type === 'progress') document.getElementById('prog-fill').style.width = `${(m.p / m.total) * 100}%`;
+            });
+            renderFloorPlan(res.tables, originals, totalPeople, globalInventory);
+        } catch (err) {
+            log(`<span style="color:red">Solver error: ${err.message}</span>`);
         }
-
-        renderFloorPlan(bestOverall, originals, totalPeople, globalInventory);
         document.getElementById('prog-cont').style.display = 'none';
+        runBtn.disabled = false;
     }
 
-    function generateSeed(groups, count, globalCap) {
-        let tables = Array.from({length: count}, (_, i) => ({ id: i+1, groups: [] }));
-        let sorted = [...groups].sort((a,b) => b.size - a.size);
-        sorted.forEach(g => {
-            let t = tables.find(tab => (tab.groups.reduce((a,b)=>a+b.size,0) + g.size) <= 10);
-            if(t) t.groups.push({ id: g.id, size: g.size });
-            else {
-                let rem = g.size;
-                for(let tab of tables) {
-                    let space = 11 - tab.groups.reduce((a,b)=>a+b.size,0);
-                    if (space >= 1) {
-                        let take = Math.min(rem, space);
-                        if (rem - take === 1 && g.size > 1 && take > 1) take--;
-                        tab.groups.push({ id: g.id, size: take }); rem -= take;
-                    }
-                    if (rem <= 0) break;
-                }
-            }
-        });
-        return tables;
+    function getPairs(originals) {
+        const ids = new Set(originals.map(o => o.id));
+        const seen = new Set(), out = [];
+        for (const m of (document.getElementById('group-pairs').value || '').matchAll(/(\d+)\s*-\s*(\d+)/g)) {
+            const a = parseInt(m[1]), b = parseInt(m[2]);
+            if (a === b || !ids.has(a) || !ids.has(b)) continue;
+            const key = Math.min(a,b) + '-' + Math.max(a,b);
+            if (!seen.has(key)) { seen.add(key); out.push([a, b]); }
+        }
+        return out;
     }
+    const pairMet = (ta, tb) => ta.some(x => tb.some(y => Math.abs(x - y) <= 1));
 
-    function repair(tables, originals, globalCap) {
-        const allowFlex = document.getElementById('rule-flex').checked;
-        let seatedMap = new Map();
-        tables.forEach(t => {
-            while (t.groups.reduce((a,b)=>a+b.size, 0) > (allowFlex ? 11 : 10)) t.groups.pop();
-            t.groups.forEach(g => seatedMap.set(g.id, (seatedMap.get(g.id) || 0) + g.size));
-        });
-        originals.forEach(og => {
-            let needed = og.size - (seatedMap.get(og.id) || 0);
-            while (needed > 0) {
-                let t = tables.find(tab => ((allowFlex ? 11 : 10) - tab.groups.reduce((a,b)=>a+b.size,0)) >= 1);
-                if (!t) break;
-                let take = Math.min(needed, (allowFlex ? 11 : 10) - t.groups.reduce((a,b)=>a+b.size,0));
-                t.groups.push({ id: og.id, size: take }); needed -= take;
-            }
-        });
-        return tables;
-    }
+    let planState = null; // { tables (as generated), originals, totalPeople }
 
-    function linearRefine(tables, originals, globalCap) {
-        let refined = clone(tables);
+    function renderAudit(tables, originals, totalPeople) {
+        const panel = document.getElementById('validation-panel'); panel.innerHTML = '';
         const doIso = document.getElementById('rule-isolation').checked;
-        let pm = new Map();
-        refined.forEach(t => t.groups.forEach(g => {
-            if(!pm.has(g.id)) pm.set(g.id, []);
-            pm.get(g.id).push({ tId: t.id, size: g.size });
-        }));
-        pm.forEach((parts, gid) => {
-            let og = originals.find(o => o.id === gid);
-            if (doIso && og.size > 1 && parts.some(p => p.size === 1)) {
-                refined.forEach(t => t.groups = t.groups.filter(g => g.id !== gid));
-                for (let t of refined) {
-                    if (t.groups.reduce((a,b)=>a+b.size,0) + og.size <= 11) {
-                        t.groups.push({ id: gid, size: og.size }); break;
-                    }
-                }
-            }
-        });
-        return refined;
-    }
-
-    function calcScore(tables, originals) {
-        let fitness = PERFECT_SCORE;
-        let seatedMap = new Map();
-        const doIso = document.getElementById('rule-isolation').checked;
+        const doAdj = document.getElementById('rule-adjacency').checked;
+        const doFlex = document.getElementById('rule-flex').checked;
         const doLimit = document.getElementById('rule-dual-split').checked;
 
-        tables.forEach(t => {
-            if (t.groups.reduce((a,b)=>a+b.size,0) === 11) fitness -= COSTS.FLEX;
-            t.groups.forEach(g => {
-                if(!seatedMap.has(g.id)) seatedMap.set(g.id, []);
-                seatedMap.get(g.id).push(t.id);
-                if (doIso && g.size === 1 && originals.find(o=>o.id===g.id).size > 1) fitness -= COSTS.ISOLATION;
-            });
-        });
-        originals.forEach(og => {
-            let ids = seatedMap.get(og.id) || [];
-            if (ids.length === 0) fitness -= COSTS.UNSEATED;
-            if (ids.length > 1) {
-                fitness -= (ids.length - 1) * COSTS.SPLIT;
-                if (doLimit && ids.length > 2) fitness -= COSTS.MULTI_SPLIT;
-                ids.sort((a,b)=>a-b);
-                for(let i=0; i<ids.length-1; i++) if(Math.abs(ids[i]-ids[i+1]) > 1) fitness -= COSTS.GAP;
-            }
-        });
-        return { fitness };
-    }
-
-    function mutate(tables) {
-        let t1 = tables[Math.floor(Math.random() * tables.length)];
-        let t2 = tables[Math.floor(Math.random() * tables.length)];
-        if (t1.groups.length > 0) t2.groups.push(t1.groups.splice(Math.floor(Math.random()*t1.groups.length), 1)[0]);
-        return tables;
-    }
-
-    function renderFloorPlan(tables, originals, totalPeople, globalCap) {
-        resultsArea.style.display = 'block';
-        const panel = document.getElementById('validation-panel'); panel.innerHTML = '';
-        const floor = document.getElementById('floor-plan'); floor.innerHTML = '';
-        
-        let seatedTotal = 0, isoErrs = [], adjErrs = [], splitMap = new Map();
-        let flexCount = 0;
+        let seatedTotal = 0, isoErrs = [], adjErrs = [], capErrs = [], splitErrs = [], splitMap = new Map();
+        const bad = new Map();
+        const flag = (tid, msg) => { if (!bad.has(tid)) bad.set(tid, []); bad.get(tid).push(msg); };
 
         tables.forEach(t => {
             let used = t.groups.reduce((a,b)=>a+b.size, 0);
             seatedTotal += used;
-            if (used === 11) flexCount++;
+            if (used > (doFlex ? 11 : 10)) { capErrs.push(`Table ${t.id} has ${used} seats (max ${doFlex ? 11 : 10}).`); flag(t.id, `Over capacity (${used})`); }
             t.groups.forEach(g => {
                 if(!splitMap.has(g.id)) splitMap.set(g.id, []);
                 splitMap.get(g.id).push(t.id);
-                if (document.getElementById('rule-isolation').checked && g.size === 1 && originals.find(o => o.id === g.id).size > 1) {
-                    isoErrs.push(`Group ${g.id} stranded on Table ${t.id}.`);
+                if (doIso && g.size === 1 && originals.find(o => o.id === g.id).size > 1) {
+                    { isoErrs.push(`Group ${g.id} stranded on Table ${t.id}.`); flag(t.id, `Group ${g.id} stranded`); }
                 }
             });
         });
 
-        splitMap.forEach((ids, gid) => { 
-            if (ids.length > 1) { 
-                ids.sort((a,b)=>a-b); 
-                for(let i=0;i<ids.length-1;i++) {
-                    if(Math.abs(ids[i]-ids[i+1])>1) adjErrs.push(`Group ${gid}: Gap found (T${ids[i]} to T${ids[i+1]}).`);
+        splitMap.forEach((ids, gid) => {
+            if (ids.length > 1) {
+                ids.sort((a,b)=>a-b);
+                if (doLimit && ids.length > 2) { splitErrs.push(`Group ${gid} split across ${ids.length} tables.`); ids.forEach(i => flag(i, `Group ${gid} on ${ids.length} tables`)); }
+                if (doAdj) for(let i=0;i<ids.length-1;i++) {
+                    if(Math.abs(ids[i]-ids[i+1])>1) { adjErrs.push(`Group ${gid}: Gap found (T${ids[i]} to T${ids[i+1]}).`); flag(ids[i], `Group ${gid} gap to T${ids[i+1]}`); flag(ids[i+1], `Group ${gid} gap to T${ids[i]}`); }
                 }
-            } 
+            }
+        });
+
+        const pairs = getPairs(originals), pairErrs = [], pairStatus = new Map();
+        pairs.forEach(([a, b]) => {
+            const ta = splitMap.get(a) || [], tb = splitMap.get(b) || [];
+            const met = pairMet(ta, tb);
+            [[a, b], [b, a]].forEach(([x, y]) => {
+                if (!pairStatus.has(x)) pairStatus.set(x, []);
+                pairStatus.get(x).push({ other: y, met });
+            });
+            if (!met) {
+                pairErrs.push(`Group ${a} and Group ${b} are not near each other.`);
+                ta.forEach(i => flag(i, `Group ${a} should be near Group ${b}`));
+                tb.forEach(i => flag(i, `Group ${b} should be near Group ${a}`));
+            }
         });
 
         const checks = [
             { label: "Attendance Audit", pass: seatedTotal === totalPeople, val: `${seatedTotal} / ${totalPeople}`, data: [] },
+            { label: "Table Capacity", pass: capErrs.length === 0, val: capErrs.length === 0 ? "PASS" : "FAIL", data: capErrs },
             { label: "Social Isolation", pass: isoErrs.length === 0, val: isoErrs.length === 0 ? "PASS" : "FAIL", data: isoErrs },
-            { label: "Strict Adjacency", pass: adjErrs.length === 0, val: adjErrs.length === 0 ? "PASS" : "FAIL", data: adjErrs }
+            { label: "Strict Adjacency", pass: adjErrs.length === 0, val: adjErrs.length === 0 ? "PASS" : "FAIL", data: adjErrs },
+            { label: "Max Dual Split", pass: splitErrs.length === 0, val: splitErrs.length === 0 ? "PASS" : "FAIL", data: splitErrs }
         ];
+        if (pairs.length > 0) checks.push({ label: "Group Pairs", pass: pairErrs.length === 0, val: pairErrs.length === 0 ? "PASS" : "FAIL", data: pairErrs });
 
         checks.forEach(c => {
             panel.innerHTML += `<div class="val-card ${c.pass ? 'pass' : 'fail'}">
@@ -386,64 +605,131 @@
         });
         document.getElementsByClassName("fail-warning")[0].innerHTML = "";
         if (checks.some(c => !c.pass)) {
-            document.getElementsByClassName("fail-warning")[0].innerHTML += `<p style="font-size: 0.85rem; color: #666; margin-top: 10px;">If a constraint fails, run it again with more optimisation tries.</p>`;
+            document.getElementsByClassName("fail-warning")[0].innerHTML += `<p style="font-size: 0.85rem; color: #666; margin-top: 10px;">If a constraint fails, run it again with more optimisation tries, or drag tables and groups to fix it.</p>`;
         }
+        return { splitMap, bad, pairStatus };
+    }
 
-        // FIXED: Number of slots exactly matches number of tables
-        const numSlots = tables.length;
-        for(let i=0; i<numSlots; i++) {
+    // Current layout: slot order = table number
+    function currentLayout() {
+        return planState.order.map((key, i) => ({ id: i + 1, key, groups: planState.tables.find(t => t.id === key).groups }));
+    }
+
+    const SPLIT_COLORS = ['#8e24aa','#1e88e5','#00897b','#f4511e','#6d4c41','#d81b60','#3949ab','#7cb342','#546e7a','#c0ca33'];
+    const splitColor = gid => SPLIT_COLORS[gid % SPLIT_COLORS.length];
+
+    // Paint split badges and violation outlines onto the cards, using current positions
+    function highlightPlan(layout, audit) {
+        const { splitMap, bad, pairStatus } = audit;
+        layout.forEach(t => {
+            const card = document.querySelector(`#floor-plan .grid-slot:nth-child(${t.id}) .table-card`);
+            if (!card) return;
+            card.classList.toggle('has-violation', bad.has(t.id));
+            card.classList.toggle('has-split', t.groups.some(g => splitMap.get(g.id).length > 1));
+            card.querySelectorAll('.violation-note').forEach(n => n.remove());
+            if (bad.has(t.id)) {
+                const n = document.createElement('div');
+                n.className = 'violation-note';
+                n.textContent = '⚠ ' + [...new Set(bad.get(t.id))].join('; ');
+                card.appendChild(n);
+            }
+            const items = card.querySelectorAll('.guest-item');
+            t.groups.forEach((g, k) => {
+                const item = items[k]; if (!item) return;
+                item.querySelectorAll('.split-chip, .pair-chip').forEach(c => c.remove());
+                const tabs = splitMap.get(g.id);
+                item.style.borderLeftColor = '';
+                if (tabs.length > 1) {
+                    const others = tabs.filter(x => x !== t.id).map(x => 'T' + x).join(', ');
+                    const chip = document.createElement('span');
+                    chip.className = 'split-chip'; chip.style.background = splitColor(g.id);
+                    chip.textContent = '↔ ' + others;
+                    item.querySelector('span').after(chip);
+                    item.style.borderLeftColor = splitColor(g.id);
+                }
+                (pairStatus.get(g.id) || []).forEach(p => {
+                    const chip = document.createElement('span');
+                    chip.className = 'pair-chip'; chip.style.background = p.met ? '#2e7d32' : '#c62828';
+                    chip.textContent = '\u{1F517} G' + p.other;
+                    item.querySelector('strong').before(chip);
+                });
+            });
+        });
+    }
+
+    function renderFloorPlan(tables, originals, totalPeople, globalCap) {
+        resultsArea.style.display = 'block';
+        planState = { tables: clone(tables), order: tables.map(t => t.id), originals, totalPeople };
+        drawPlan();
+    }
+
+    // Draw (or redraw) slots, cards, audit and highlights from planState
+    function drawPlan() {
+        const layout = currentLayout();
+        const audit = renderAudit(layout, planState.originals, planState.totalPeople);
+        const splitMap = audit.splitMap;
+        const floor = document.getElementById('floor-plan'); floor.innerHTML = '';
+        let remFlex = layout.filter(t => t.groups.reduce((a,b)=>a+b.size, 0) === 11).length;
+
+        layout.forEach((t, i) => {
             const slot = document.createElement('div');
             slot.className = 'grid-slot'; slot.id = `slot-${i}`;
-            slot.ondragover = (e) => e.preventDefault();
+            slot.ondragover = (e) => { e.preventDefault(); slot.classList.add('drop-hover'); };
+            slot.ondragleave = () => slot.classList.remove('drop-hover');
             slot.ondrop = handleDrop;
             floor.appendChild(slot);
-        }
 
-        let remFlex = flexCount;
-        tables.forEach((t, i) => {
             let used = t.groups.reduce((a,b)=>a+b.size, 0);
-            let dMax = 10, cClass = "";
-            if (used === 11) { dMax = 11; cClass = "color-flex"; }
-            else if (used < 10 && remFlex > 0) { dMax = 9; remFlex--; cClass = "color-lend"; }
-            else if (used === 10) { dMax = 10; cClass = "color-full"; }
+            let cClass = "";
+            if (used === 11) cClass = "color-flex";
+            else if (used < 10 && remFlex > 0) { remFlex--; cClass = "color-lend"; }
+            else if (used === 10) cClass = "color-full";
 
             const card = document.createElement('div');
             card.className = `table-card ${cClass}`;
-            card.id = `table-${t.id}`;
+            card.id = `table-${t.key}`;
             card.draggable = true;
-            card.ondragstart = (e) => e.dataTransfer.setData("text", card.id);
-            
-            let guestHtml = t.groups.map(g => `<div class="guest-item ${splitMap.get(g.id).length > 1 ? 'is-split' : ''}"><span>Group ${g.id}</span> <strong>${g.size}</strong></div>`).join('');
-            card.innerHTML = `<h4><input class="table-name-input" value="Table ${i+1}"> <span>${used} Seats</span></h4>${guestHtml}`;
-            document.getElementById(`slot-${i}`).appendChild(card);
+            card.ondragstart = (e) => e.dataTransfer.setData("text", `table:${t.key}`);
+
+            card.innerHTML = `<h4><input class="table-name-input" value="Table ${i+1}"> <span>${used} Seats</span></h4>`;
+            t.groups.forEach(g => {
+                const item = document.createElement('div');
+                item.className = `guest-item ${splitMap.get(g.id).length > 1 ? 'is-split' : ''}`;
+                item.draggable = true;
+                item.innerHTML = `<span>Group ${g.id}</span> <strong>${g.size}</strong>`;
+                item.ondragstart = (e) => { e.stopPropagation(); e.dataTransfer.setData("text", `group:${t.key}:${g.id}`); };
+                card.appendChild(item);
+            });
+            slot.appendChild(card);
         });
+        highlightPlan(layout, audit);
     }
 
     function handleDrop(e) {
         e.preventDefault();
-        const draggedId = e.dataTransfer.getData("text");
-        const draggedCard = document.getElementById(draggedId);
         const targetSlot = e.target.closest('.grid-slot');
+        document.querySelectorAll('.grid-slot.drop-hover').forEach(s => s.classList.remove('drop-hover'));
+        if (!targetSlot) return;
+        const [kind, a, b] = e.dataTransfer.getData("text").split(':');
+        const targetIdx = parseInt(targetSlot.id.replace('slot-', ''));
+        const targetKey = planState.order[targetIdx];
 
-        if (targetSlot && draggedCard) {
-            const existingCard = targetSlot.querySelector('.table-card');
-            const sourceSlot = draggedCard.parentElement;
-
-            if (existingCard) {
-                sourceSlot.appendChild(existingCard);
-                targetSlot.appendChild(draggedCard);
-                renumberTable(existingCard, sourceSlot);
-                renumberTable(draggedCard, targetSlot);
-            } else {
-                targetSlot.appendChild(draggedCard);
-                renumberTable(draggedCard, targetSlot);
-            }
-        }
-    }
-
-    function renumberTable(card, slot) {
-        const slotIdx = parseInt(slot.id.replace('slot-', '')) + 1;
-        card.querySelector('.table-name-input').value = `Table ${slotIdx}`;
+        if (kind === 'table') {
+            const srcIdx = planState.order.indexOf(parseInt(a));
+            if (srcIdx < 0 || srcIdx === targetIdx) return;
+            [planState.order[srcIdx], planState.order[targetIdx]] = [planState.order[targetIdx], planState.order[srcIdx]];
+        } else if (kind === 'group') {
+            const srcKey = parseInt(a), gid = parseInt(b);
+            if (srcKey === targetKey) return;
+            const src = planState.tables.find(t => t.id === srcKey);
+            const dst = planState.tables.find(t => t.id === targetKey);
+            const idx = src.groups.findIndex(g => g.id === gid);
+            if (idx < 0) return;
+            const [part] = src.groups.splice(idx, 1);
+            const same = dst.groups.find(g => g.id === gid);
+            if (same) same.size += part.size; else dst.groups.push(part);
+        } else return;
+        drawPlan();
     }
 
     document.getElementById('run-btn').onclick = runGA;
